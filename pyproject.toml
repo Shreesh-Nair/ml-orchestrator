@@ -1,0 +1,21 @@
+[project]
+name = "ml-orchestrator"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Shreesh-Nair",email = "shreeshrnair@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "mlflow (<3.0)",
+    "pandas (<2.2)",
+    "pyyaml (<7.0)",
+    "scikit-learn (==1.5.2)",
+    "opencv-python-headless (<4.11)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

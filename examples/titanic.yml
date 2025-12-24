@@ -1,0 +1,17 @@
+pipeline_name: titanic_survival 
+stages: 
+  - name: load_data 
+    type: csv_loader 
+    params: 
+      source: "data/titanic.csv" 
+      target_column: Survived 
+  - name: preprocess 
+    type: tabular_preprocess 
+    params: 
+      impute_missing: true 
+      scale_numeric: true 
+  - name: train 
+    type: classification 
+    models: 
+      - type: random_forest 
+        n_estimators: 100 
