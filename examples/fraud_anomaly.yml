@@ -1,0 +1,20 @@
+pipeline_name: fraud_anomaly_detection
+
+stages:
+  - name: load_data
+    type: csv_loader
+    params:
+      source: "data/fraud.csv"        # you will add this file
+      target_column: Class            # 0 = normal, 1 = fraud (for metrics)
+
+  - name: preprocess
+    type: tabular_preprocess
+    params:
+      impute_missing: true
+      scale_numeric: true
+
+  - name: detect_anomalies
+    type: anomaly_isolation_forest
+    params:
+      contamination: 0.01             # expected fraction of anomalies
+      random_state: 42
