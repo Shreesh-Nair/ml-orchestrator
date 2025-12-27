@@ -1,0 +1,14 @@
+pipeline_name: anomaly_gui_run
+stages:
+- name: load_data
+  type: csv_loader
+  params:
+    source: C:\ml-orchestrator\ml-orchestrator\data\fraud.csv
+    target_column: Class
+- name: preprocess
+  type: tabular_preprocess
+  params:
+    target_column: Class
+- name: model
+  type: anomaly_isolation_forest
+  params: {}

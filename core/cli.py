@@ -15,6 +15,11 @@ def list_pipelines() -> None:
     for yml in sorted(EXAMPLES_DIR.glob("*.yml")):
         print(f"  - {yml.stem} ({yml})")
 
+def preprocess_pipeline() -> None:
+    """Quick preprocess command for fraud detection pipeline."""
+    from handlers.preprocess import tabular_preprocess  # adjust import
+    print("Running preprocessing pipeline...")
+    tabular_preprocess()
 
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
@@ -49,7 +54,9 @@ def main(argv: list[str] | None = None) -> None:
 
         run_pipeline(str(path))
         return
-
+    if cmd == 'preprocess':
+        preprocess_pipeline()
+        return
     raise SystemExit(f"Unknown command: {cmd!r}")
 
 
