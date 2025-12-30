@@ -3,12 +3,12 @@ stages:
 - name: load_data
   type: csv_loader
   params:
-    source: C:\ml-orchestrator\ml-orchestrator\data\fraud.csv
-    target_column: Class
+    source: C:\ml-orchestrator\ml-orchestrator\data\titanic.csv
+    target_column: Survived
 - name: preprocess
   type: tabular_preprocess
   params:
-    target_column: Class
+    target_column: Survived
 - name: model
   type: classification
   params: {}

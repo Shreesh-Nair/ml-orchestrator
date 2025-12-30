@@ -17,7 +17,7 @@ from handlers.base import BaseHandler
 class TabularPreprocessHandler(BaseHandler):
     """
     Basic tabular preprocessing:
-      - Splits df into X (features) and y (target)
+      - Splits df into X (features) and y (target)  
       - Imputes missing values
       - One-hot encodes categoricals
       - Scales numerical features
