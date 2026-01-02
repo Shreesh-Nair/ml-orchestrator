@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QMessageBox,
+    QCheckBox,
+    QDoubleSpinBox,
 )
 from PySide6.QtCore import Qt
 
@@ -58,7 +60,7 @@ class MainWindow(QMainWindow):
         task_row = QHBoxLayout()
         task_row.addWidget(QLabel("Task type:"))
         self.task_combo = QComboBox()
-        self.task_combo.addItems(["classification", "anomaly"])  # regression later
+        self.task_combo.addItems(["classification", "regression", "anomaly"])
         task_row.addWidget(self.task_combo)
         main_layout.addLayout(task_row)
 
@@ -71,9 +73,40 @@ class MainWindow(QMainWindow):
         target_row.addWidget(self.target_combo)
         main_layout.addLayout(target_row)
 
+        # 🔥 Preprocessing controls section
+        prep_label = QLabel("Preprocessing options:")
+        prep_label.setStyleSheet("font-weight: bold; padding: 5px;")
+        main_layout.addWidget(prep_label)
+        
+        # Scale numeric checkbox
+        self.scale_checkbox = QCheckBox("Scale numeric features")
+        self.scale_checkbox.setChecked(True)  # default ON
+        main_layout.addWidget(self.scale_checkbox)
+        
+        # Encode categoricals checkbox  
+        self.encode_checkbox = QCheckBox("One-hot encode categoricals")
+        self.encode_checkbox.setChecked(True)  # default ON
+        main_layout.addWidget(self.encode_checkbox)
+        
+        # Test size row
+        test_row = QHBoxLayout()
+        test_row.addWidget(QLabel("Test size:"))
+        self.test_size_spin = QDoubleSpinBox()
+        self.test_size_spin.setRange(0.1, 0.4)
+        self.test_size_spin.setSingleStep(0.05)
+        self.test_size_spin.setValue(0.2)  # default 20%
+        self.test_size_spin.setSuffix(" (")
+        self.test_size_spin.setDecimals(2)
+        self.test_size_label = QLabel("20%)")
+        test_row.addWidget(self.test_size_spin)
+        test_row.addWidget(self.test_size_label)
+        test_row.addStretch()
+        main_layout.addLayout(test_row)
+
         # Run button
         run_btn = QPushButton("Run pipeline")
         run_btn.clicked.connect(self.on_run_clicked)
+        run_btn.setStyleSheet("font-weight: bold; padding: 10px;")
         main_layout.addWidget(run_btn)
 
         # Logs
@@ -88,6 +121,11 @@ class MainWindow(QMainWindow):
         self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value"])
         self.metrics_table.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.metrics_table)
+
+        # Connect test size label update
+        self.test_size_spin.valueChanged.connect(
+            lambda v: self.test_size_label.setText(f"{int(v*100)}%)")
+        )
 
     # ---------- UI callbacks ----------
 
@@ -173,16 +211,31 @@ class MainWindow(QMainWindow):
             {
                 "name": "preprocess",
                 "type": "tabular_preprocess",
-                "params": {"target_column": self.target_column},
+                "params": {
+                    "target_column": self.target_column,
+                    "task_type": task,
+                    # ✅ Preprocessing params passed to handler
+                    "scale_numeric": self.scale_checkbox.isChecked(),
+                    "encode_categoricals": self.encode_checkbox.isChecked(),
+                    "test_size": float(self.test_size_spin.value()),
+                },
             },
         ]
 
+        # Model stages
         if task == "classification":
-            # matches handler_registry: "classification": RandomForestTrainHandler
             stages.append(
                 {
                     "name": "model",
                     "type": "classification",
+                    "params": {},
+                }
+            )
+        elif task == "regression":
+            stages.append(
+                {
+                    "name": "model",
+                    "type": "regression",
                     "params": {},
                 }
             )
@@ -218,7 +271,7 @@ class MainWindow(QMainWindow):
 def main() -> None:
     app = QApplication(sys.argv)
     win = MainWindow()
-    win.resize(900, 600)
+    win.resize(900, 700)
     win.show()
     sys.exit(app.exec())
 

@@ -9,6 +9,10 @@ stages:
   type: tabular_preprocess
   params:
     target_column: Class
+    task_type: anomaly
+    scale_numeric: true
+    encode_categoricals: true
+    test_size: 0.2
 - name: model
   type: anomaly_isolation_forest
   params: {}

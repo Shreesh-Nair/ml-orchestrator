@@ -1,0 +1,18 @@
+pipeline_name: regression_gui_run
+stages:
+- name: load_data
+  type: csv_loader
+  params:
+    source: C:\ml-orchestrator\ml-orchestrator\data\housing.csv
+    target_column: median_house_value
+- name: preprocess
+  type: tabular_preprocess
+  params:
+    target_column: median_house_value
+    task_type: regression
+    scale_numeric: false
+    encode_categoricals: false
+    test_size: 0.1
+- name: model
+  type: regression
+  params: {}

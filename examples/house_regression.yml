@@ -1,0 +1,18 @@
+pipeline_name: house_price_regression
+stages:
+  - name: load_data
+    type: csv_loader
+    params:
+      source: data/house_prices.csv     # you will need to provide a CSV
+      target_column: SalePrice         # adjust to your dataset
+
+  - name: preprocess
+    type: tabular_preprocess
+    params:
+      target_column: SalePrice
+
+  - name: model
+    type: regression
+    params:
+      n_estimators: 100
+      max_depth: null
