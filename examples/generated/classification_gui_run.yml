@@ -12,7 +12,7 @@ stages:
     task_type: classification
     scale_numeric: true
     encode_categoricals: true
-    test_size: 0.25
+    test_size: 0.2
 - name: model
   type: classification_logreg
   params: {}
