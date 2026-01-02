@@ -1,2 +1,3 @@
 data/fraud.csv 
 models/
+logs/runs.csv
