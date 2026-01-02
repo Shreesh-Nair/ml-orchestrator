@@ -10,9 +10,9 @@ stages:
   params:
     target_column: median_house_value
     task_type: regression
-    scale_numeric: false
-    encode_categoricals: false
-    test_size: 0.1
+    scale_numeric: true
+    encode_categoricals: true
+    test_size: 0.2
 - name: model
-  type: regression
+  type: regression_linear
   params: {}

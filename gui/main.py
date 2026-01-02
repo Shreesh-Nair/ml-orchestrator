@@ -61,8 +61,18 @@ class MainWindow(QMainWindow):
         task_row.addWidget(QLabel("Task type:"))
         self.task_combo = QComboBox()
         self.task_combo.addItems(["classification", "regression", "anomaly"])
+        self.task_combo.currentTextChanged.connect(self.update_model_options)  # ✅ Connect update
         task_row.addWidget(self.task_combo)
         main_layout.addLayout(task_row)
+
+        # 🔥 NEW: Algorithm Dropdown
+        algo_row = QHBoxLayout()
+        algo_row.addWidget(QLabel("Algorithm:"))
+        self.algo_combo = QComboBox()
+        # Initialize with classification models (default task)
+        self.algo_combo.addItems(["RandomForest", "LogisticRegression"])
+        algo_row.addWidget(self.algo_combo)
+        main_layout.addLayout(algo_row)
 
         # Row: target column
         target_row = QHBoxLayout()
@@ -73,28 +83,25 @@ class MainWindow(QMainWindow):
         target_row.addWidget(self.target_combo)
         main_layout.addLayout(target_row)
 
-        # 🔥 Preprocessing controls section
+        # Preprocessing controls
         prep_label = QLabel("Preprocessing options:")
         prep_label.setStyleSheet("font-weight: bold; padding: 5px;")
         main_layout.addWidget(prep_label)
         
-        # Scale numeric checkbox
         self.scale_checkbox = QCheckBox("Scale numeric features")
-        self.scale_checkbox.setChecked(True)  # default ON
+        self.scale_checkbox.setChecked(True)
         main_layout.addWidget(self.scale_checkbox)
         
-        # Encode categoricals checkbox  
         self.encode_checkbox = QCheckBox("One-hot encode categoricals")
-        self.encode_checkbox.setChecked(True)  # default ON
+        self.encode_checkbox.setChecked(True)
         main_layout.addWidget(self.encode_checkbox)
         
-        # Test size row
         test_row = QHBoxLayout()
         test_row.addWidget(QLabel("Test size:"))
         self.test_size_spin = QDoubleSpinBox()
         self.test_size_spin.setRange(0.1, 0.4)
         self.test_size_spin.setSingleStep(0.05)
-        self.test_size_spin.setValue(0.2)  # default 20%
+        self.test_size_spin.setValue(0.2)
         self.test_size_spin.setSuffix(" (")
         self.test_size_spin.setDecimals(2)
         self.test_size_label = QLabel("20%)")
@@ -102,6 +109,10 @@ class MainWindow(QMainWindow):
         test_row.addWidget(self.test_size_label)
         test_row.addStretch()
         main_layout.addLayout(test_row)
+
+        self.test_size_spin.valueChanged.connect(
+            lambda v: self.test_size_label.setText(f"{int(v*100)}%)")
+        )
 
         # Run button
         run_btn = QPushButton("Run pipeline")
@@ -122,12 +133,17 @@ class MainWindow(QMainWindow):
         self.metrics_table.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.metrics_table)
 
-        # Connect test size label update
-        self.test_size_spin.valueChanged.connect(
-            lambda v: self.test_size_label.setText(f"{int(v*100)}%)")
-        )
-
     # ---------- UI callbacks ----------
+
+    def update_model_options(self, task: str) -> None:
+        """Update the algorithm dropdown based on selected task."""
+        self.algo_combo.clear()
+        if task == "classification":
+            self.algo_combo.addItems(["RandomForest", "LogisticRegression"])
+        elif task == "regression":
+            self.algo_combo.addItems(["RandomForest", "LinearRegression"])
+        elif task == "anomaly":
+            self.algo_combo.addItems(["IsolationForest"])
 
     def on_browse_clicked(self) -> None:
         path_str, _ = QFileDialog.getOpenFileName(
@@ -151,7 +167,6 @@ class MainWindow(QMainWindow):
             self.target_combo.setEnabled(False)
             return
 
-        # Populate target column dropdown
         self.target_combo.clear()
         for col in self.current_df.columns:
             self.target_combo.addItem(col)
@@ -192,12 +207,15 @@ class MainWindow(QMainWindow):
 
     def _write_generated_yaml(self, task: str) -> Path:
         """
-        Generate a YAML file under examples/generated/ using your existing
-        handlers: csv_loader, tabular_preprocess, and model handlers.
+        Generate a YAML file under examples/generated/ using:
+        - task type (classification/regression)
+        - selected algorithm (RF/Linear/Logistic)
+        - preprocessing options
         """
         import yaml  # Local import
 
         pipeline_name = f"{task}_gui_run"
+        algo = self.algo_combo.currentText()  # e.g., "LogisticRegression"
 
         stages = [
             {
@@ -214,7 +232,6 @@ class MainWindow(QMainWindow):
                 "params": {
                     "target_column": self.target_column,
                     "task_type": task,
-                    # ✅ Preprocessing params passed to handler
                     "scale_numeric": self.scale_checkbox.isChecked(),
                     "encode_categoricals": self.encode_checkbox.isChecked(),
                     "test_size": float(self.test_size_spin.value()),
@@ -222,31 +239,29 @@ class MainWindow(QMainWindow):
             },
         ]
 
-        # Model stages
+        # ✅ Map GUI selection to handler_registry keys
+        model_type = "classification_rf"  # Default fallback
+
         if task == "classification":
-            stages.append(
-                {
-                    "name": "model",
-                    "type": "classification",
-                    "params": {},
-                }
-            )
+            if algo == "LogisticRegression":
+                model_type = "classification_logreg"
+            else:
+                model_type = "classification_rf"
+        
         elif task == "regression":
-            stages.append(
-                {
-                    "name": "model",
-                    "type": "regression",
-                    "params": {},
-                }
-            )
+            if algo == "LinearRegression":
+                model_type = "regression_linear"
+            else:
+                model_type = "regression_rf"
+        
         elif task == "anomaly":
-            stages.append(
-                {
-                    "name": "model",
-                    "type": "anomaly_isolation_forest",
-                    "params": {},
-                }
-            )
+            model_type = "anomaly_isolation_forest"
+
+        stages.append({
+            "name": "model",
+            "type": model_type,
+            "params": {}
+        })
 
         config = {
             "pipeline_name": pipeline_name,
@@ -271,7 +286,7 @@ class MainWindow(QMainWindow):
 def main() -> None:
     app = QApplication(sys.argv)
     win = MainWindow()
-    win.resize(900, 700)
+    win.resize(900, 750)  # Taller for extra controls
     win.show()
     sys.exit(app.exec())
 
