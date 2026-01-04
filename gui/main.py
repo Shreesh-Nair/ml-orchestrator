@@ -20,9 +20,9 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QFileDialog, QTextEdit, QTableWidget,
+    QPushButton, QComboBox, QFileDialog, QTableWidget,
     QTableWidgetItem, QMessageBox, QCheckBox, QDoubleSpinBox, QTabWidget,
-    QScrollArea, QFormLayout, QLineEdit, QSplitter, QListWidget, QFrame, QGroupBox
+    QScrollArea, QFormLayout, QLineEdit, QSplitter, QListWidget, QGroupBox
 )
 from PySide6.QtCore import Qt
 from core.executor import run_pipeline
@@ -33,9 +33,10 @@ GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 MODELS_DIR = Path("models")
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- NEW: Matplotlib Canvas Class ---
+# --- Matplotlib Canvas Class ---
 class MplCanvas(FigureCanvasQTAgg):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
+        # Increased default figsize slightly
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
         super().__init__(fig)
@@ -70,7 +71,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(predict_tab, "Model Library & Predict")
 
     def setup_train_tab(self, tab: QWidget):
-        # Use a Splitter so charts don't squash the controls
         splitter = QSplitter(Qt.Vertical)
         layout = QVBoxLayout(tab)
         layout.addWidget(splitter)
@@ -163,7 +163,7 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(top_widget)
 
-        # --- Bottom Section: Visualizations (NEW) ---
+        # --- Bottom Section: Visualizations ---
         viz_widget = QWidget()
         viz_layout = QVBoxLayout(viz_widget)
         viz_layout.addWidget(QLabel("Visualizations:"))
@@ -173,7 +173,7 @@ class MainWindow(QMainWindow):
         viz_layout.addWidget(self.viz_tabs)
         
         splitter.addWidget(viz_widget)
-        splitter.setSizes([500, 400]) # Give more space to top initially
+        splitter.setSizes([450, 450]) 
 
     def setup_predict_tab(self, tab: QWidget):
         layout = QHBoxLayout(tab)
@@ -270,7 +270,7 @@ class MainWindow(QMainWindow):
             self.last_run_context = context
             self.btn_save_model.setEnabled(True)
             self._show_metrics(context)
-            self._update_visualizations(context) # NEW: Update charts
+            self._update_visualizations(context)
         except Exception as e:
             QMessageBox.critical(self, "Pipeline Error", str(e))
         finally:
@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
             self.metrics_table.setItem(row, 0, QTableWidgetItem(str(k)))
             self.metrics_table.setItem(row, 1, QTableWidgetItem(f"{v:.4f}"))
 
+    # ================= VISUALIZATION FIXES =================
     def _update_visualizations(self, context: Dict[str, Any]):
         """Parses 'artifacts' from context and plots them."""
         self.viz_tabs.clear()
@@ -306,8 +307,13 @@ class MainWindow(QMainWindow):
             canvas = MplCanvas(self, width=5, height=4, dpi=100)
             ax = canvas.axes
             disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+            
+            # Plot with smaller font for values inside cells if needed, but default is usually okay
             disp.plot(ax=ax, cmap="Blues", colorbar=True)
-            ax.set_title("Confusion Matrix")
+            ax.set_title("Confusion Matrix", fontsize=10)
+            
+            # FIX: Tight Layout to prevent clipping
+            canvas.figure.tight_layout()
             self.viz_tabs.addTab(canvas, "Confusion Matrix")
 
         # 2. Feature Importance
@@ -322,18 +328,34 @@ class MainWindow(QMainWindow):
             
             canvas = MplCanvas(self, width=5, height=4, dpi=100)
             ax = canvas.axes
+            
+            # Bar plot
             ax.bar(range(len(indices)), importances[indices], align="center")
             ax.set_xticks(range(len(indices)))
-            # Clean up long names
-            clean_names = [str(names[i]).split("__")[-1] for i in indices]
-            ax.set_xticklabels(clean_names, rotation=45, ha="right")
-            ax.set_title("Top 10 Feature Importances")
+            
+            # Clean up long names: split by '__' and take last part, truncate if >15 chars
+            clean_names = []
+            for i in indices:
+                s = str(names[i]).split("__")[-1]
+                if len(s) > 15:
+                    s = s[:12] + "..."
+                clean_names.append(s)
+                
+            ax.set_xticklabels(clean_names, rotation=45, ha="right", fontsize=9)
+            ax.set_title("Top 10 Feature Importances", fontsize=10)
+            
+            # FIX: Explicit bottom margin for rotated labels
+            canvas.figure.subplots_adjust(bottom=0.25) 
+            # tight_layout might override subplots_adjust, usually safe to call tight_layout afterwards 
+            # but sometimes tight_layout fails with severe rotation. 
+            # Using tight_layout with padding usually works best.
+            canvas.figure.tight_layout()
+            
             canvas.draw()
             self.viz_tabs.addTab(canvas, "Feature Importance")
 
         # 3. ROC Curve
         if "y_proba" in artifacts and "y_test" in artifacts:
-            # Only for binary classification usually
             y_proba = artifacts["y_proba"]
             y_test = artifacts["y_test"]
             if y_proba.shape[1] == 2: # Binary
@@ -343,14 +365,17 @@ class MainWindow(QMainWindow):
                 
                 canvas = MplCanvas(self, width=5, height=4, dpi=100)
                 ax = canvas.axes
-                ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+                ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'AUC = {roc_auc:.2f}')
                 ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
                 ax.set_xlim([0.0, 1.0])
                 ax.set_ylim([0.0, 1.05])
-                ax.set_xlabel('False Positive Rate')
-                ax.set_ylabel('True Positive Rate')
-                ax.set_title('Receiver Operating Characteristic')
-                ax.legend(loc="lower right")
+                ax.set_xlabel('False Positive Rate', fontsize=9)
+                ax.set_ylabel('True Positive Rate', fontsize=9)
+                ax.set_title('ROC Curve', fontsize=10)
+                ax.legend(loc="lower right", fontsize=9)
+                
+                # FIX: Tight layout
+                canvas.figure.tight_layout()
                 self.viz_tabs.addTab(canvas, "ROC Curve")
 
     def _write_generated_yaml(self, task: str) -> Path:
