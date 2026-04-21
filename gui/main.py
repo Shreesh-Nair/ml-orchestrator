@@ -1,31 +1,49 @@
-import sys
-import os
-import datetime
-from pathlib import Path
-from typing import Dict, Any, List
-import joblib
+from __future__ import annotations
 
-# Matplotlib for PySide6
+import datetime
+import math
+import sys
+from pathlib import Path
+from typing import Any, Dict, List
+
+import joblib
 import matplotlib
-matplotlib.use('QtAgg')
+import numpy as np
+import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-import numpy as np
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-# Make project root importable
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QFileDialog, QTableWidget,
-    QTableWidgetItem, QMessageBox, QCheckBox, QDoubleSpinBox, QTabWidget,
-    QScrollArea, QFormLayout, QLineEdit, QSplitter, QListWidget, QGroupBox
-)
-from PySide6.QtCore import Qt
 from core.executor import run_pipeline
+
+matplotlib.use("QtAgg")
 
 EXAMPLES_DIR = Path("examples")
 GENERATED_DIR = EXAMPLES_DIR / "generated"
@@ -33,25 +51,28 @@ GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 MODELS_DIR = Path("models")
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- Matplotlib Canvas Class ---
+
 class MplCanvas(FigureCanvasQTAgg):
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        # Increased default figsize slightly
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
-        super().__init__(fig)
+    def __init__(self, parent=None, width: float = 5.0, height: float = 4.0, dpi: int = 100):
+        figure = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = figure.add_subplot(111)
+        super().__init__(figure)
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("ML Orchestrator GUI")
+        self.setWindowTitle("ML Orchestrator - Binary Classification MVP")
+
         self.csv_path: Path | None = None
         self.target_column: str | None = None
         self.current_df: pd.DataFrame | None = None
-        
+
         self.last_run_context: Dict[str, Any] | None = None
-        self.loaded_model_context: Dict[str, Any] | None = None
+        self.loaded_model_payload: Dict[str, Any] | None = None
+
         self.prediction_inputs: Dict[str, QLineEdit] = {}
+        self.prediction_schema: List[Dict[str, str]] = []
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -60,26 +81,22 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
 
-        # Tab 1: Train
         train_tab = QWidget()
         self.setup_train_tab(train_tab)
-        self.tabs.addTab(train_tab, "Train Pipeline")
+        self.tabs.addTab(train_tab, "Train")
 
-        # Tab 2: Predict
         predict_tab = QWidget()
         self.setup_predict_tab(predict_tab)
         self.tabs.addTab(predict_tab, "Model Library & Predict")
 
-    def setup_train_tab(self, tab: QWidget):
+    def setup_train_tab(self, tab: QWidget) -> None:
         splitter = QSplitter(Qt.Vertical)
         layout = QVBoxLayout(tab)
         layout.addWidget(splitter)
 
-        # --- Top Section: Controls ---
         top_widget = QWidget()
         top_layout = QVBoxLayout(top_widget)
 
-        # File Picker
         file_row = QHBoxLayout()
         self.file_label = QLabel("No CSV selected")
         browse_btn = QPushButton("Browse CSV")
@@ -88,20 +105,16 @@ class MainWindow(QMainWindow):
         file_row.addWidget(browse_btn)
         top_layout.addLayout(file_row)
 
-        # Config Rows
         task_row = QHBoxLayout()
-        task_row.addWidget(QLabel("Task type:"))
-        self.task_combo = QComboBox()
-        self.task_combo.addItems(["classification", "regression", "anomaly"])
-        self.task_combo.currentTextChanged.connect(self.update_model_options)
-        task_row.addWidget(self.task_combo)
+        task_row.addWidget(QLabel("Task:"))
+        task_row.addWidget(QLabel("Binary Classification (MVP)"))
+        task_row.addStretch()
         top_layout.addLayout(task_row)
 
         algo_row = QHBoxLayout()
         algo_row.addWidget(QLabel("Algorithm:"))
-        self.algo_combo = QComboBox()
-        self.algo_combo.addItems(["RandomForest", "LogisticRegression"])
-        algo_row.addWidget(self.algo_combo)
+        algo_row.addWidget(QLabel("RandomForest (MVP)"))
+        algo_row.addStretch()
         top_layout.addLayout(algo_row)
 
         target_row = QHBoxLayout()
@@ -112,158 +125,196 @@ class MainWindow(QMainWindow):
         target_row.addWidget(self.target_combo)
         top_layout.addLayout(target_row)
 
-        # Preprocessing
-        prep_group = QGroupBox("Preprocessing Options")
+        prep_group = QGroupBox("Preprocessing")
         prep_layout = QVBoxLayout()
         self.scale_checkbox = QCheckBox("Scale numeric features")
         self.scale_checkbox.setChecked(True)
         prep_layout.addWidget(self.scale_checkbox)
-        self.encode_checkbox = QCheckBox("One-hot encode categoricals")
+
+        self.encode_checkbox = QCheckBox("One-hot encode categorical features")
         self.encode_checkbox.setChecked(True)
         prep_layout.addWidget(self.encode_checkbox)
-        
+
         test_row = QHBoxLayout()
         test_row.addWidget(QLabel("Test size:"))
         self.test_size_spin = QDoubleSpinBox()
         self.test_size_spin.setRange(0.1, 0.4)
         self.test_size_spin.setSingleStep(0.05)
         self.test_size_spin.setValue(0.2)
-        self.test_size_spin.setSuffix("")
         self.test_size_label = QLabel("(20%)")
         self.test_size_spin.valueChanged.connect(
-            lambda v: self.test_size_label.setText(f"({int(v*100)}%)")
+            lambda value: self.test_size_label.setText(f"({int(value * 100)}%)")
         )
         test_row.addWidget(self.test_size_spin)
         test_row.addWidget(self.test_size_label)
         test_row.addStretch()
         prep_layout.addLayout(test_row)
+
         prep_group.setLayout(prep_layout)
         top_layout.addWidget(prep_group)
 
-        # Run Button
-        run_btn = QPushButton("Run Pipeline")
-        run_btn.clicked.connect(self.on_run_clicked)
+        run_btn = QPushButton("Train + Evaluate")
         run_btn.setStyleSheet("font-weight: bold; padding: 8px;")
+        run_btn.clicked.connect(self.on_run_clicked)
         top_layout.addWidget(run_btn)
 
-        # Metrics Table (Small)
         top_layout.addWidget(QLabel("Metrics:"))
         self.metrics_table = QTableWidget(0, 2)
         self.metrics_table.setHorizontalHeaderLabels(["Metric", "Value"])
         self.metrics_table.horizontalHeader().setStretchLastSection(True)
-        self.metrics_table.setMaximumHeight(80)
+        self.metrics_table.setMaximumHeight(140)
         top_layout.addWidget(self.metrics_table)
-        
-        # Save Button
+
         self.btn_save_model = QPushButton("Save Model")
-        self.btn_save_model.clicked.connect(self.on_save_model_clicked)
-        self.btn_save_model.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         self.btn_save_model.setEnabled(False)
+        self.btn_save_model.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.btn_save_model.clicked.connect(self.on_save_model_clicked)
         top_layout.addWidget(self.btn_save_model)
 
         splitter.addWidget(top_widget)
 
-        # --- Bottom Section: Visualizations ---
         viz_widget = QWidget()
         viz_layout = QVBoxLayout(viz_widget)
-        viz_layout.addWidget(QLabel("Visualizations:"))
-        
-        self.viz_tabs = QTabWidget()
-        self.viz_tabs.addTab(QLabel("Run a pipeline to see plots."), "Info")
-        viz_layout.addWidget(self.viz_tabs)
-        
-        splitter.addWidget(viz_widget)
-        splitter.setSizes([450, 450]) 
+        viz_layout.addWidget(QLabel("Evaluation Plots:"))
 
-    def setup_predict_tab(self, tab: QWidget):
+        self.viz_tabs = QTabWidget()
+        self.viz_tabs.addTab(QLabel("Run training to see evaluation plots."), "Info")
+        viz_layout.addWidget(self.viz_tabs)
+
+        splitter.addWidget(viz_widget)
+        splitter.setSizes([420, 480])
+
+    def setup_predict_tab(self, tab: QWidget) -> None:
         layout = QHBoxLayout(tab)
         splitter = QSplitter(Qt.Horizontal)
-        
-        # Left Panel
+        layout.addWidget(splitter)
+
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.addWidget(QLabel("Saved Models:"))
+        left_layout.addWidget(QLabel("Saved Models"))
+
         self.model_list = QListWidget()
         self.model_list.currentItemChanged.connect(self.on_model_selected)
         left_layout.addWidget(self.model_list)
+
         refresh_btn = QPushButton("Refresh List")
         refresh_btn.clicked.connect(self.refresh_model_list)
         left_layout.addWidget(refresh_btn)
         splitter.addWidget(left_panel)
-        
-        # Right Panel
+
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        
-        self.info_box = QGroupBox("Selected Model Details")
+
+        self.info_box = QGroupBox("Selected Model")
         info_layout = QVBoxLayout()
         self.lbl_model_info = QLabel("Select a model to view details.")
         self.lbl_model_info.setWordWrap(True)
         info_layout.addWidget(self.lbl_model_info)
         self.info_box.setLayout(info_layout)
         right_layout.addWidget(self.info_box)
-        
-        right_layout.addWidget(QLabel("Input Features:"))
+
+        right_layout.addWidget(QLabel("Input Features"))
         self.predict_scroll = QScrollArea()
         self.predict_scroll.setWidgetResizable(True)
+
         self.predict_form_widget = QWidget()
         self.predict_form_layout = QFormLayout(self.predict_form_widget)
         self.predict_scroll.setWidget(self.predict_form_widget)
         right_layout.addWidget(self.predict_scroll)
-        
+
         self.btn_predict = QPushButton("Predict")
-        self.btn_predict.clicked.connect(self.on_predict_clicked)
-        self.btn_predict.setStyleSheet("font-weight: bold; padding: 10px; background-color: #e0f7fa; color: black;")
         self.btn_predict.setEnabled(False)
+        self.btn_predict.setStyleSheet("font-weight: bold; padding: 10px; background-color: #e0f7fa; color: black;")
+        self.btn_predict.clicked.connect(self.on_predict_clicked)
         right_layout.addWidget(self.btn_predict)
-        
+
         self.lbl_prediction_result = QLabel("Result: -")
-        self.lbl_prediction_result.setStyleSheet("font-size: 18px; font-weight: bold; color: #00796b; padding: 5px;")
         self.lbl_prediction_result.setAlignment(Qt.AlignCenter)
+        self.lbl_prediction_result.setStyleSheet("font-size: 16px; font-weight: bold; color: #00796b; padding: 5px;")
         right_layout.addWidget(self.lbl_prediction_result)
-        
+
         splitter.addWidget(right_panel)
-        splitter.setSizes([250, 600])
-        layout.addWidget(splitter)
+        splitter.setSizes([260, 640])
+
         self.refresh_model_list()
 
-    def update_model_options(self, task: str) -> None:
-        self.algo_combo.clear()
-        if task == "classification":
-            self.algo_combo.addItems(["RandomForest", "LogisticRegression"])
-        elif task == "regression":
-            self.algo_combo.addItems(["RandomForest", "LinearRegression"])
-        elif task == "anomaly":
-            self.algo_combo.addItems(["IsolationForest"])
-
     def on_browse_clicked(self) -> None:
-        path_str, _ = QFileDialog.getOpenFileName(self, "Select CSV", str(Path.cwd() / "data"), "CSV Files (*.csv)")
-        if not path_str: return
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select CSV",
+            str(Path.cwd() / "data"),
+            "CSV Files (*.csv)",
+        )
+        if not path_str:
+            return
+
         self.csv_path = Path(path_str)
-        self.file_label.setText(self.csv_path.name)
         try:
-            self.current_df = pd.read_csv(self.csv_path)
+            df = pd.read_csv(self.csv_path)
+            if df.empty:
+                raise ValueError("CSV has no rows")
+
+            self.current_df = df
+            self.file_label.setText(f"{self.csv_path.name} ({df.shape[0]} rows, {df.shape[1]} cols)")
+
             self.target_combo.clear()
-            for col in self.current_df.columns:
+            for col in df.columns:
                 self.target_combo.addItem(col)
             self.target_combo.setEnabled(True)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            if self.target_combo.count() > 0:
+                self.target_combo.setCurrentIndex(0)
+
+            self.btn_save_model.setEnabled(False)
+            self.last_run_context = None
+            self.metrics_table.setRowCount(0)
+            self.viz_tabs.clear()
+            self.viz_tabs.addTab(QLabel("Run training to see evaluation plots."), "Info")
+        except Exception as exc:
+            QMessageBox.critical(self, "CSV Error", str(exc))
 
     def on_target_changed(self, index: int) -> None:
         if index >= 0:
             self.target_column = self.target_combo.itemText(index)
 
+    def _validate_binary_target(self) -> Dict[str, int]:
+        if self.current_df is None:
+            raise ValueError("Please select a CSV file first.")
+        if not self.target_column or self.target_column not in self.current_df.columns:
+            raise ValueError("Please select a valid target column.")
+
+        target = self.current_df[self.target_column].dropna()
+        if target.empty:
+            raise ValueError("Target column is empty after removing missing values.")
+
+        class_counts = target.value_counts(dropna=False)
+        if len(class_counts) != 2:
+            raise ValueError(
+                "Target must have exactly 2 classes for this MVP. "
+                f"Found {len(class_counts)} classes: {list(class_counts.index)}"
+            )
+        if int(class_counts.min()) < 2:
+            raise ValueError(
+                "Each class must have at least 2 rows for train/test split. "
+                f"Class counts: {class_counts.to_dict()}"
+            )
+        return class_counts.to_dict()
+
     def on_run_clicked(self) -> None:
         if not self.csv_path or not self.target_column:
-            QMessageBox.warning(self, "Inputs Missing", "Select CSV and Target Column.")
+            QMessageBox.warning(self, "Inputs Missing", "Please select CSV and target column.")
+            return
+
+        try:
+            self._validate_binary_target()
+        except Exception as exc:
+            QMessageBox.warning(self, "Invalid Target", str(exc))
             return
 
         self.btn_save_model.setEnabled(False)
         self.last_run_context = None
-        task = self.task_combo.currentText()
-        yaml_path = self._write_generated_yaml(task)
-        
+
+        yaml_path = self._write_generated_yaml()
+
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             context = run_pipeline(str(yaml_path))
@@ -271,250 +322,359 @@ class MainWindow(QMainWindow):
             self.btn_save_model.setEnabled(True)
             self._show_metrics(context)
             self._update_visualizations(context)
-        except Exception as e:
-            QMessageBox.critical(self, "Pipeline Error", str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, "Pipeline Error", str(exc))
         finally:
             QApplication.restoreOverrideCursor()
 
-    def _show_metrics(self, context: Dict[str, Any]) -> None:
-        metrics = context.get("metrics") or context.get("anomaly_metrics") or {}
-        self.metrics_table.setRowCount(0)
-        for row, (k, v) in enumerate(metrics.items()):
-            self.metrics_table.insertRow(row)
-            self.metrics_table.setItem(row, 0, QTableWidgetItem(str(k)))
-            self.metrics_table.setItem(row, 1, QTableWidgetItem(f"{v:.4f}"))
+    def _format_metric(self, value: Any) -> str:
+        if isinstance(value, (int, float, np.floating, np.integer)):
+            if isinstance(value, float) and math.isnan(value):
+                return "nan"
+            return f"{float(value):.4f}"
+        return str(value)
 
-    # ================= VISUALIZATION FIXES =================
-    def _update_visualizations(self, context: Dict[str, Any]):
-        """Parses 'artifacts' from context and plots them."""
+    def _show_metrics(self, context: Dict[str, Any]) -> None:
+        metrics = context.get("metrics") or {}
+        preferred_order = ["accuracy", "precision", "recall", "f1", "roc_auc"]
+
+        ordered_keys: List[str] = [key for key in preferred_order if key in metrics]
+        ordered_keys.extend([key for key in metrics.keys() if key not in ordered_keys])
+
+        self.metrics_table.setRowCount(0)
+        for row, key in enumerate(ordered_keys):
+            self.metrics_table.insertRow(row)
+            self.metrics_table.setItem(row, 0, QTableWidgetItem(key))
+            self.metrics_table.setItem(row, 1, QTableWidgetItem(self._format_metric(metrics[key])))
+
+    def _update_visualizations(self, context: Dict[str, Any]) -> None:
         self.viz_tabs.clear()
-        artifacts = context.get("artifacts", {})
-        
+        artifacts = context.get("artifacts") or {}
+
         if not artifacts:
-            self.viz_tabs.addTab(QLabel("No visualization data available for this model."), "Info")
+            self.viz_tabs.addTab(QLabel("No visualization data available."), "Info")
             return
 
-        # 1. Confusion Matrix
         if "y_test" in artifacts and "y_pred" in artifacts:
-            from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-            y_test = artifacts["y_test"]
-            y_pred = artifacts["y_pred"]
-            
-            # Compute matrix
-            cm = confusion_matrix(y_test, y_pred)
-            
-            # Plot
+            from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+
+            y_test = np.asarray(artifacts["y_test"])
+            y_pred = np.asarray(artifacts["y_pred"])
+            labels = np.asarray(artifacts.get("classes", sorted(np.unique(y_test))))
+            cm = confusion_matrix(y_test, y_pred, labels=labels)
+
             canvas = MplCanvas(self, width=5, height=4, dpi=100)
-            ax = canvas.axes
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-            
-            # Plot with smaller font for values inside cells if needed, but default is usually okay
-            disp.plot(ax=ax, cmap="Blues", colorbar=True)
-            ax.set_title("Confusion Matrix", fontsize=10)
-            
-            # FIX: Tight Layout to prevent clipping
+            display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+            display.plot(ax=canvas.axes, cmap="Blues", colorbar=True)
+            canvas.axes.set_title("Confusion Matrix", fontsize=10)
             canvas.figure.tight_layout()
             self.viz_tabs.addTab(canvas, "Confusion Matrix")
 
-        # 2. Feature Importance
         if "feature_importance" in artifacts:
-            importances = artifacts["feature_importance"]
-            names = artifacts.get("feature_names", [f"F{i}" for i in range(len(importances))])
-            
-            # Sort indices
-            indices = np.argsort(importances)[::-1]
-            top_n = 10 # Limit to top 10
-            indices = indices[:top_n]
-            
-            canvas = MplCanvas(self, width=5, height=4, dpi=100)
-            ax = canvas.axes
-            
-            # Bar plot
-            ax.bar(range(len(indices)), importances[indices], align="center")
-            ax.set_xticks(range(len(indices)))
-            
-            # Clean up long names: split by '__' and take last part, truncate if >15 chars
-            clean_names = []
-            for i in indices:
-                s = str(names[i]).split("__")[-1]
-                if len(s) > 15:
-                    s = s[:12] + "..."
-                clean_names.append(s)
-                
-            ax.set_xticklabels(clean_names, rotation=45, ha="right", fontsize=9)
-            ax.set_title("Top 10 Feature Importances", fontsize=10)
-            
-            # FIX: Explicit bottom margin for rotated labels
-            canvas.figure.subplots_adjust(bottom=0.25) 
-            # tight_layout might override subplots_adjust, usually safe to call tight_layout afterwards 
-            # but sometimes tight_layout fails with severe rotation. 
-            # Using tight_layout with padding usually works best.
-            canvas.figure.tight_layout()
-            
-            canvas.draw()
-            self.viz_tabs.addTab(canvas, "Feature Importance")
+            importances = np.asarray(artifacts["feature_importance"])
+            if importances.ndim == 1 and len(importances) > 0:
+                names = artifacts.get("feature_names", [f"feature_{i}" for i in range(len(importances))])
+                sorted_idx = np.argsort(importances)[::-1][:10]
 
-        # 3. ROC Curve
-        if "y_proba" in artifacts and "y_test" in artifacts:
-            y_proba = artifacts["y_proba"]
-            y_test = artifacts["y_test"]
-            if y_proba.shape[1] == 2: # Binary
-                from sklearn.metrics import roc_curve, auc
-                fpr, tpr, _ = roc_curve(y_test, y_proba[:, 1])
-                roc_auc = auc(fpr, tpr)
-                
                 canvas = MplCanvas(self, width=5, height=4, dpi=100)
                 ax = canvas.axes
-                ax.plot(fpr, tpr, color='darkorange', lw=2, label=f'AUC = {roc_auc:.2f}')
-                ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-                ax.set_xlim([0.0, 1.0])
-                ax.set_ylim([0.0, 1.05])
-                ax.set_xlabel('False Positive Rate', fontsize=9)
-                ax.set_ylabel('True Positive Rate', fontsize=9)
-                ax.set_title('ROC Curve', fontsize=10)
-                ax.legend(loc="lower right", fontsize=9)
-                
-                # FIX: Tight layout
+                ax.bar(range(len(sorted_idx)), importances[sorted_idx], align="center")
+                ax.set_xticks(range(len(sorted_idx)))
+
+                clean_names: List[str] = []
+                for idx in sorted_idx:
+                    label = str(names[idx]).split("__")[-1]
+                    if len(label) > 20:
+                        label = f"{label[:17]}..."
+                    clean_names.append(label)
+
+                ax.set_xticklabels(clean_names, rotation=45, ha="right", fontsize=9)
+                ax.set_title("Top Feature Importances", fontsize=10)
                 canvas.figure.tight_layout()
-                self.viz_tabs.addTab(canvas, "ROC Curve")
+                self.viz_tabs.addTab(canvas, "Feature Importance")
 
-    def _write_generated_yaml(self, task: str) -> Path:
+        if "y_proba" in artifacts and "y_test" in artifacts:
+            from sklearn.metrics import auc, roc_curve
+
+            classes = list(np.asarray(artifacts.get("classes", [])))
+            positive_label = artifacts.get("positive_label")
+            if len(classes) == 2:
+                if positive_label not in classes:
+                    positive_label = classes[1]
+
+                y_test = np.asarray(artifacts["y_test"])
+                y_proba = np.asarray(artifacts["y_proba"])
+                positive_index = classes.index(positive_label)
+                y_true_bin = (y_test == positive_label).astype(int)
+
+                if len(np.unique(y_true_bin)) == 2:
+                    fpr, tpr, _ = roc_curve(y_true_bin, y_proba[:, positive_index])
+                    roc_auc = auc(fpr, tpr)
+
+                    canvas = MplCanvas(self, width=5, height=4, dpi=100)
+                    ax = canvas.axes
+                    ax.plot(fpr, tpr, color="darkorange", lw=2, label=f"AUC = {roc_auc:.2f}")
+                    ax.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
+                    ax.set_xlim([0.0, 1.0])
+                    ax.set_ylim([0.0, 1.05])
+                    ax.set_xlabel("False Positive Rate", fontsize=9)
+                    ax.set_ylabel("True Positive Rate", fontsize=9)
+                    ax.set_title(f"ROC Curve (Positive={positive_label})", fontsize=10)
+                    ax.legend(loc="lower right", fontsize=9)
+                    canvas.figure.tight_layout()
+                    self.viz_tabs.addTab(canvas, "ROC Curve")
+
+    def _write_generated_yaml(self) -> Path:
         import yaml
-        pipeline_name = f"{task}_gui_run"
-        algo = self.algo_combo.currentText()
 
-        stages = [
-            {"name": "load_data", "type": "csv_loader", "params": {"source": str(self.csv_path), "target_column": self.target_column}},
-            {"name": "preprocess", "type": "tabular_preprocess", "params": {
-                "target_column": self.target_column, "task_type": task,
-                "scale_numeric": self.scale_checkbox.isChecked(),
-                "encode_categoricals": self.encode_checkbox.isChecked(),
-                "test_size": float(self.test_size_spin.value())
-            }}
-        ]
+        config = {
+            "pipeline_name": "binary_classification_gui_run",
+            "stages": [
+                {
+                    "name": "load_data",
+                    "type": "csv_loader",
+                    "params": {
+                        "source": str(self.csv_path),
+                        "target_column": self.target_column,
+                    },
+                },
+                {
+                    "name": "preprocess",
+                    "type": "tabular_preprocess",
+                    "params": {
+                        "target_column": self.target_column,
+                        "task_type": "classification",
+                        "require_binary_target": True,
+                        "scale_numeric": self.scale_checkbox.isChecked(),
+                        "encode_categoricals": self.encode_checkbox.isChecked(),
+                        "test_size": float(self.test_size_spin.value()),
+                    },
+                },
+                {
+                    "name": "model",
+                    "type": "classification_rf",
+                    "params": {},
+                },
+            ],
+        }
 
-        model_type = "classification_rf"
-        if task == "classification":
-            model_type = "classification_logreg" if algo == "LogisticRegression" else "classification_rf"
-        elif task == "regression":
-            model_type = "regression_linear" if algo == "LinearRegression" else "regression_rf"
-        elif task == "anomaly":
-            model_type = "anomaly_isolation_forest"
-
-        stages.append({"name": "model", "type": model_type, "params": {}})
-        
-        config = {"pipeline_name": pipeline_name, "stages": stages}
-        yaml_path = GENERATED_DIR / f"{pipeline_name}.yml"
+        yaml_path = GENERATED_DIR / "binary_classification_gui_run.yml"
         with yaml_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(config, f, sort_keys=False)
         return yaml_path
 
-    # ================= LOGIC: SAVE & MODEL LIBRARY =================
     def on_save_model_clicked(self) -> None:
-        if not self.last_run_context: return
-        task = self.task_combo.currentText()
-        algo = self.algo_combo.currentText()
-        default_name = f"{task}_{algo}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pkl"
-        path_str, _ = QFileDialog.getSaveFileName(self, "Save Model", str(MODELS_DIR / default_name), "Model Files (*.pkl)")
-        if not path_str: return
-        
+        if not self.last_run_context:
+            QMessageBox.warning(self, "Nothing to Save", "Please train a model first.")
+            return
+
+        context = self.last_run_context
+        model = context.get("model")
+        preprocessor = context.get("preprocessor")
+        if model is None:
+            QMessageBox.warning(self, "Save Error", "No trained model found in the last run.")
+            return
+
+        artifacts = context.get("artifacts") or {}
+        class_labels = context.get("class_labels") or list(np.asarray(artifacts.get("classes", [])))
+        feature_columns = context.get("feature_columns") or []
+        feature_dtypes = context.get("feature_dtypes") or {}
+
+        if not feature_columns and self.current_df is not None and self.target_column in self.current_df.columns:
+            feature_columns = list(self.current_df.columns.drop(self.target_column))
+            feature_dtypes = {col: str(self.current_df[col].dtype) for col in feature_columns}
+
+        default_name = f"binary_rf_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pkl"
+        path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Model",
+            str(MODELS_DIR / default_name),
+            "Model Files (*.pkl)",
+        )
+        if not path_str:
+            return
+
         meta = {
-            "task": task,
-            "algorithm": algo,
+            "task": "binary_classification",
+            "algorithm": "RandomForest",
             "dataset": self.csv_path.name if self.csv_path else "unknown",
             "target": self.target_column,
-            "features": list(self.current_df.columns.drop(self.target_column)) if self.current_df is not None else [],
+            "feature_columns": feature_columns,
+            "feature_dtypes": feature_dtypes,
+            "class_labels": [str(label) if isinstance(label, Path) else label for label in class_labels],
+            "positive_label": artifacts.get("positive_label"),
+            "preprocess": {
+                "scale_numeric": self.scale_checkbox.isChecked(),
+                "encode_categoricals": self.encode_checkbox.isChecked(),
+                "test_size": float(self.test_size_spin.value()),
+            },
             "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "metrics": self.last_run_context.get("metrics", {})
+            "metrics": context.get("metrics", {}),
         }
-        
+
         payload = {
             "meta": meta,
             "objects": {
-                "model": self.last_run_context.get("model"),
-                "preprocessor": self.last_run_context.get("preprocessor")
-            }
+                "model": model,
+                "preprocessor": preprocessor,
+            },
         }
-        
+
         try:
             joblib.dump(payload, path_str)
             self.refresh_model_list()
-            QMessageBox.information(self, "Saved", "Model saved to library!")
             self.tabs.setCurrentIndex(1)
-        except Exception as e:
-            QMessageBox.critical(self, "Save Error", str(e))
+            QMessageBox.information(self, "Saved", "Model saved.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Save Error", str(exc))
 
-    def refresh_model_list(self):
+    def refresh_model_list(self) -> None:
         self.model_list.clear()
-        if not MODELS_DIR.exists(): return
-        files = sorted(MODELS_DIR.glob("*.pkl"), key=os.path.getmtime, reverse=True)
-        for p in files:
-            self.model_list.addItem(p.name)
+        if not MODELS_DIR.exists():
+            return
 
-    def on_model_selected(self, item):
-        if not item: return
-        filename = item.text()
-        path = MODELS_DIR / filename
+        files = sorted(MODELS_DIR.glob("*.pkl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for path in files:
+            self.model_list.addItem(path.name)
+
+    def on_model_selected(self, item) -> None:
+        if item is None:
+            return
+
+        model_path = MODELS_DIR / item.text()
+        self.btn_predict.setEnabled(False)
+        self.loaded_model_payload = None
+        self.prediction_schema = []
+        self.lbl_prediction_result.setText("Result: -")
+
         try:
-            payload = joblib.load(path)
-            if "meta" not in payload:
-                self.lbl_model_info.setText("Legacy model format (no metadata). Prediction might fail.")
-                self.loaded_model_context = None
-                self.btn_predict.setEnabled(False)
-                return
-            
-            meta = payload["meta"]
-            self.loaded_model_context = payload["objects"]
-            metrics_str = ", ".join([f"{k}={v:.3f}" for k,v in meta.get("metrics", {}).items()])
-            info_text = (f"Algorithm: {meta['algorithm']} ({meta['task']})\n"
-                         f"Dataset: {meta['dataset']} (Target: {meta['target']})\n"
-                         f"Date: {meta['date']}\n"
-                         f"Metrics: {metrics_str}")
-            self.lbl_model_info.setText(info_text)
-            self._generate_prediction_form(meta["features"])
-            self.btn_predict.setEnabled(True)
-            self.lbl_prediction_result.setText("Result: -")
-        except Exception as e:
-            self.lbl_model_info.setText(f"Error loading model: {e}")
-            self.btn_predict.setEnabled(False)
+            payload = joblib.load(model_path)
+            if not isinstance(payload, dict) or "meta" not in payload or "objects" not in payload:
+                raise ValueError("Invalid model file format")
 
-    def _generate_prediction_form(self, features: List[str]):
+            meta = payload["meta"]
+            if meta.get("task") != "binary_classification":
+                raise ValueError("This model is not from the binary-classification MVP flow")
+
+            feature_columns = meta.get("feature_columns")
+            feature_dtypes = meta.get("feature_dtypes", {})
+            if not isinstance(feature_columns, list) or not feature_columns:
+                raise ValueError("Model file missing feature schema")
+
+            self.prediction_schema = [
+                {"name": feature, "dtype": str(feature_dtypes.get(feature, "object"))}
+                for feature in feature_columns
+            ]
+
+            metrics = meta.get("metrics", {})
+            metrics_text = ", ".join([f"{k}={self._format_metric(v)}" for k, v in metrics.items()])
+            classes_text = ", ".join([str(c) for c in meta.get("class_labels", [])])
+
+            self.lbl_model_info.setText(
+                f"Algorithm: {meta.get('algorithm')}\n"
+                f"Dataset: {meta.get('dataset')}\n"
+                f"Target: {meta.get('target')}\n"
+                f"Classes: {classes_text}\n"
+                f"Date: {meta.get('date')}\n"
+                f"Metrics: {metrics_text if metrics_text else '-'}"
+            )
+
+            self.loaded_model_payload = payload
+            self._generate_prediction_form(self.prediction_schema)
+            self.btn_predict.setEnabled(True)
+        except Exception as exc:
+            self.lbl_model_info.setText(f"Error loading model: {exc}")
+
+    def _generate_prediction_form(self, schema: List[Dict[str, str]]) -> None:
         while self.predict_form_layout.count():
             child = self.predict_form_layout.takeAt(0)
-            if child.widget(): child.widget().deleteLater()
-        self.prediction_inputs = {}
-        for feat in features:
-            le = QLineEdit()
-            le.setPlaceholderText(f"Value for {feat}")
-            self.predict_form_layout.addRow(f"{feat}:", le)
-            self.prediction_inputs[feat] = le
+            if child.widget():
+                child.widget().deleteLater()
 
-    def on_predict_clicked(self):
-        if not self.loaded_model_context: return
-        model = self.loaded_model_context["model"]
-        preprocessor = self.loaded_model_context["preprocessor"]
-        input_data = {}
+        self.prediction_inputs = {}
+        for item in schema:
+            feature = item["name"]
+            dtype = item["dtype"]
+            widget = QLineEdit()
+            widget.setPlaceholderText(f"Enter {feature}")
+            self.predict_form_layout.addRow(f"{feature} ({dtype}):", widget)
+            self.prediction_inputs[feature] = widget
+
+    def _coerce_input_value(self, feature: str, raw_value: str, dtype: str) -> Any:
+        value = raw_value.strip()
+        if value == "":
+            raise ValueError(f"Missing value for '{feature}'")
+
+        normalized = dtype.lower()
+
+        if "int" in normalized:
+            float_val = float(value)
+            if not float_val.is_integer():
+                raise ValueError(f"'{feature}' expects an integer")
+            return int(float_val)
+
+        if any(token in normalized for token in ["float", "double", "decimal"]):
+            return float(value)
+
+        if "bool" in normalized:
+            low = value.lower()
+            if low in {"true", "1", "yes", "y"}:
+                return True
+            if low in {"false", "0", "no", "n"}:
+                return False
+            raise ValueError(f"'{feature}' expects a boolean (true/false)")
+
+        return value
+
+    def on_predict_clicked(self) -> None:
+        if not self.loaded_model_payload:
+            return
+
+        objects = self.loaded_model_payload.get("objects", {})
+        meta = self.loaded_model_payload.get("meta", {})
+        model = objects.get("model")
+        preprocessor = objects.get("preprocessor")
+
+        if model is None:
+            QMessageBox.critical(self, "Prediction Error", "Loaded file does not contain a model.")
+            return
+
         try:
-            for feat, widget in self.prediction_inputs.items():
-                val = widget.text().strip()
-                if not val: raise ValueError(f"Missing {feat}")
-                try:
-                    input_data[feat] = float(val)
-                except:
-                    input_data[feat] = val
-            df = pd.DataFrame([input_data])
-            X = preprocessor.transform(df) if preprocessor else df
-            pred = model.predict(X)[0]
-            self.lbl_prediction_result.setText(f"Result: {pred}")
-        except Exception as e:
-            QMessageBox.critical(self, "Prediction Error", str(e))
+            row: Dict[str, Any] = {}
+            for item in self.prediction_schema:
+                feature = item["name"]
+                dtype = item["dtype"]
+                widget = self.prediction_inputs[feature]
+                row[feature] = self._coerce_input_value(feature, widget.text(), dtype)
+
+            input_df = pd.DataFrame([row])
+            X = preprocessor.transform(input_df) if preprocessor is not None else input_df
+
+            prediction = model.predict(X)[0]
+            result = f"Predicted class: {prediction}"
+
+            if hasattr(model, "predict_proba"):
+                probs = model.predict_proba(X)[0]
+                classes = list(getattr(model, "classes_", meta.get("class_labels", [])))
+                positive_label = meta.get("positive_label")
+                if positive_label in classes:
+                    positive_idx = classes.index(positive_label)
+                    result += f" | P({positive_label}) = {float(probs[positive_idx]):.3f}"
+
+            self.lbl_prediction_result.setText(result)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Input Error", str(exc))
+        except Exception as exc:
+            QMessageBox.critical(self, "Prediction Error", str(exc))
+
 
 def main() -> None:
     app = QApplication(sys.argv)
-    win = MainWindow()
-    win.resize(1100, 850)
-    win.show()
+    window = MainWindow()
+    window.resize(1120, 860)
+    window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

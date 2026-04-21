@@ -1,9 +1,7 @@
-# handlers/preprocess/tabular_preprocess.py
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any, Dict
 
-import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -36,20 +34,49 @@ class TabularPreprocessHandler(BaseHandler):
                 f"TabularPreprocessHandler: target_column {target_column!r} not found in df.columns"
             )
 
-        X = df.drop(columns=[target_column])
-        y = df[target_column]
+        X = df.drop(columns=[target_column]).copy()
+        y = df[target_column].copy()
 
-        # Basic heuristics: object/category → categorical, rest → numeric
-        categorical_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-        numeric_cols = X.select_dtypes(exclude=["object", "category"]).columns.tolist()
-
-        # Read preprocessing params (defaults to True/0.2 if missing)
+        # Read preprocessing params
         impute_missing = bool(self.stage.params.get("impute_missing", True))
         scale_numeric = bool(self.stage.params.get("scale_numeric", True))
-        encode_categoricals = bool(self.stage.params.get("encode_categoricals", True))  # ✅ FIXED
-        test_size = float(self.stage.params.get("test_size", 0.2))  # ✅ FIXED
+        encode_categoricals = bool(self.stage.params.get("encode_categoricals", True))
+        test_size = float(self.stage.params.get("test_size", 0.2))
+        task_type = str(self.stage.params.get("task_type", "classification")).strip().lower()
+        require_binary_target = bool(
+            self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
+        )
 
-        # --- 1. Numeric Pipeline ---
+        if not (0.0 < test_size < 1.0):
+            raise ValueError(f"TabularPreprocessHandler: test_size must be in (0, 1), got {test_size}")
+
+        # Drop rows where target is missing
+        valid_target_mask = ~y.isna()
+        dropped_rows = int((~valid_target_mask).sum())
+        if dropped_rows > 0:
+            X = X.loc[valid_target_mask]
+            y = y.loc[valid_target_mask]
+
+        if y.empty:
+            raise ValueError("TabularPreprocessHandler: target column has no valid rows after filtering")
+
+        class_counts = y.value_counts(dropna=False)
+        if require_binary_target:
+            if len(class_counts) != 2:
+                raise ValueError(
+                    "TabularPreprocessHandler: binary classification requires exactly 2 target classes. "
+                    f"Found {len(class_counts)} classes: {list(class_counts.index)}"
+                )
+            if int(class_counts.min()) < 2:
+                raise ValueError(
+                    "TabularPreprocessHandler: each class needs at least 2 rows for stratified train/test split. "
+                    f"Class counts: {class_counts.to_dict()}"
+                )
+
+        categorical_cols = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+        numeric_cols = X.select_dtypes(exclude=["object", "category", "bool"]).columns.tolist()
+
+        # Numeric pipeline
         numeric_transformers = []
         if impute_missing:
             numeric_transformers.append(("imputer", SimpleImputer(strategy="median")))
@@ -61,7 +88,7 @@ class TabularPreprocessHandler(BaseHandler):
         else:
             numeric_transformer = "passthrough"
 
-        # --- 2. Categorical Pipeline ---
+        # Categorical pipeline
         if encode_categoricals:
             categorical_transformer = Pipeline(
                 steps=[
@@ -70,14 +97,9 @@ class TabularPreprocessHandler(BaseHandler):
                 ]
             )
         else:
-            # If user unchecks "Encode", we drop categoricals or pass raw?
-            # Standard sklearn models (RF/LogReg) crash on raw strings.
-            # Best behavior here: if encoding disabled, we just drop categorical columns
-            # OR pass them through if using a model that handles them (like CatBoost).
-            # For your current RandomForest, dropping them is safer to avoid crashes.
+            # Current models do not support raw strings directly.
             categorical_transformer = "drop"
 
-        # --- 3. Combine ---
         preprocessor = ColumnTransformer(
             transformers=[
                 ("num", numeric_transformer, numeric_cols),
@@ -87,17 +109,17 @@ class TabularPreprocessHandler(BaseHandler):
 
         X_processed = preprocessor.fit_transform(X)
 
-        # --- 4. Split (using GUI test_size) ---
-        task_type = self.stage.params.get("task_type", "classification")
         if task_type == "regression":
-            # Regression: no stratification
             X_train, X_test, y_train, y_test = train_test_split(
-                X_processed, y, test_size=test_size, random_state=42  # ✅ FIXED
+                X_processed, y, test_size=test_size, random_state=42
             )
         else:
-            # Classification: use stratification
             X_train, X_test, y_train, y_test = train_test_split(
-                X_processed, y, test_size=test_size, random_state=42, stratify=y  # ✅ FIXED
+                X_processed,
+                y,
+                test_size=test_size,
+                random_state=42,
+                stratify=y,
             )
 
         context["preprocessor"] = preprocessor
@@ -105,10 +127,17 @@ class TabularPreprocessHandler(BaseHandler):
         context["X_test"] = X_test
         context["y_train"] = y_train.to_numpy()
         context["y_test"] = y_test.to_numpy()
+        context["feature_columns"] = X.columns.tolist()
+        context["feature_dtypes"] = {col: str(X[col].dtype) for col in X.columns}
+        context["target_class_counts"] = class_counts.to_dict()
+        if require_binary_target:
+            context["class_labels"] = class_counts.index.tolist()
 
         print(
             f"[tabular_preprocess] X_train shape: {X_train.shape}, X_test shape: {X_test.shape}, "
             f"y_train: {y_train.shape}, y_test: {y_test.shape}"
         )
+        if dropped_rows > 0:
+            print(f"[tabular_preprocess] Dropped {dropped_rows} rows with missing target values")
 
         return context
