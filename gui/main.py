@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -42,14 +42,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.executor import run_pipeline
+from core.paths import (
+    get_data_dir,
+    get_demo_dataset_path,
+    get_generated_pipelines_dir,
+    get_models_dir,
+)
 
 matplotlib.use("QtAgg")
 
-EXAMPLES_DIR = Path("examples")
-GENERATED_DIR = EXAMPLES_DIR / "generated"
-GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-MODELS_DIR = Path("models")
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = get_data_dir()
+GENERATED_DIR = get_generated_pipelines_dir()
+MODELS_DIR = get_models_dir()
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -59,10 +63,26 @@ class MplCanvas(FigureCanvasQTAgg):
         super().__init__(figure)
 
 
+class PipelineRunWorker(QThread):
+    succeeded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, yaml_path: str) -> None:
+        super().__init__()
+        self.yaml_path = yaml_path
+
+    def run(self) -> None:
+        try:
+            context = run_pipeline(self.yaml_path)
+            self.succeeded.emit(context)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("ML Orchestrator - Binary Classification MVP")
+        self.setWindowTitle("ML Orchestrator - Binary Classification Demo")
 
         self.csv_path: Path | None = None
         self.target_column: str | None = None
@@ -73,6 +93,7 @@ class MainWindow(QMainWindow):
 
         self.prediction_inputs: Dict[str, QLineEdit] = {}
         self.prediction_schema: List[Dict[str, str]] = []
+        self.run_worker: PipelineRunWorker | None = None
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -99,21 +120,24 @@ class MainWindow(QMainWindow):
 
         file_row = QHBoxLayout()
         self.file_label = QLabel("No CSV selected")
-        browse_btn = QPushButton("Browse CSV")
-        browse_btn.clicked.connect(self.on_browse_clicked)
+        self.btn_browse_csv = QPushButton("Browse CSV")
+        self.btn_browse_csv.clicked.connect(self.on_browse_clicked)
+        self.btn_run_demo = QPushButton("Run Demo Dataset")
+        self.btn_run_demo.clicked.connect(self.on_run_demo_clicked)
         file_row.addWidget(self.file_label)
-        file_row.addWidget(browse_btn)
+        file_row.addWidget(self.btn_browse_csv)
+        file_row.addWidget(self.btn_run_demo)
         top_layout.addLayout(file_row)
 
         task_row = QHBoxLayout()
         task_row.addWidget(QLabel("Task:"))
-        task_row.addWidget(QLabel("Binary Classification (MVP)"))
+        task_row.addWidget(QLabel("Binary Classification (Demo)"))
         task_row.addStretch()
         top_layout.addLayout(task_row)
 
         algo_row = QHBoxLayout()
         algo_row.addWidget(QLabel("Algorithm:"))
-        algo_row.addWidget(QLabel("RandomForest (MVP)"))
+        algo_row.addWidget(QLabel("RandomForest (Demo)"))
         algo_row.addStretch()
         top_layout.addLayout(algo_row)
 
@@ -153,10 +177,13 @@ class MainWindow(QMainWindow):
         prep_group.setLayout(prep_layout)
         top_layout.addWidget(prep_group)
 
-        run_btn = QPushButton("Train + Evaluate")
-        run_btn.setStyleSheet("font-weight: bold; padding: 8px;")
-        run_btn.clicked.connect(self.on_run_clicked)
-        top_layout.addWidget(run_btn)
+        self.btn_run_train = QPushButton("Train + Evaluate")
+        self.btn_run_train.setStyleSheet("font-weight: bold; padding: 8px;")
+        self.btn_run_train.clicked.connect(self.on_run_clicked)
+        top_layout.addWidget(self.btn_run_train)
+
+        self.lbl_training_status = QLabel("Ready")
+        top_layout.addWidget(self.lbl_training_status)
 
         top_layout.addWidget(QLabel("Metrics:"))
         self.metrics_table = QTableWidget(0, 2)
@@ -242,13 +269,34 @@ class MainWindow(QMainWindow):
         path_str, _ = QFileDialog.getOpenFileName(
             self,
             "Select CSV",
-            str(Path.cwd() / "data"),
+            str(DATA_DIR),
             "CSV Files (*.csv)",
         )
         if not path_str:
             return
 
-        self.csv_path = Path(path_str)
+        self._load_csv(Path(path_str))
+
+    def on_run_demo_clicked(self) -> None:
+        try:
+            demo_path = get_demo_dataset_path()
+        except Exception as exc:
+            QMessageBox.critical(self, "Demo Dataset Error", str(exc))
+            return
+
+        try:
+            self._load_csv(demo_path)
+            if self.target_combo.count() > 0:
+                demo_target = "Survived"
+                demo_index = self.target_combo.findText(demo_target)
+                if demo_index >= 0:
+                    self.target_combo.setCurrentIndex(demo_index)
+            self.on_run_clicked()
+        except Exception as exc:
+            QMessageBox.critical(self, "Demo Run Error", str(exc))
+
+    def _load_csv(self, csv_path: Path) -> None:
+        self.csv_path = csv_path
         try:
             df = pd.read_csv(self.csv_path)
             if df.empty:
@@ -289,7 +337,7 @@ class MainWindow(QMainWindow):
         class_counts = target.value_counts(dropna=False)
         if len(class_counts) != 2:
             raise ValueError(
-                "Target must have exactly 2 classes for this MVP. "
+                "Target must have exactly 2 classes for this demo. "
                 f"Found {len(class_counts)} classes: {list(class_counts.index)}"
             )
         if int(class_counts.min()) < 2:
@@ -300,6 +348,9 @@ class MainWindow(QMainWindow):
         return class_counts.to_dict()
 
     def on_run_clicked(self) -> None:
+        if self.run_worker is not None and self.run_worker.isRunning():
+            return
+
         if not self.csv_path or not self.target_column:
             QMessageBox.warning(self, "Inputs Missing", "Please select CSV and target column.")
             return
@@ -315,17 +366,42 @@ class MainWindow(QMainWindow):
 
         yaml_path = self._write_generated_yaml()
 
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            context = run_pipeline(str(yaml_path))
-            self.last_run_context = context
-            self.btn_save_model.setEnabled(True)
-            self._show_metrics(context)
-            self._update_visualizations(context)
-        except Exception as exc:
-            QMessageBox.critical(self, "Pipeline Error", str(exc))
-        finally:
+        self._set_training_state(True)
+        self.run_worker = PipelineRunWorker(str(yaml_path.resolve()))
+        self.run_worker.succeeded.connect(self._on_train_succeeded)
+        self.run_worker.failed.connect(self._on_train_failed)
+        self.run_worker.finished.connect(self._on_train_finished)
+        self.run_worker.start()
+
+    def _set_training_state(self, in_progress: bool) -> None:
+        self.btn_run_train.setEnabled(not in_progress)
+        self.btn_browse_csv.setEnabled(not in_progress)
+        self.btn_run_demo.setEnabled(not in_progress)
+        self.target_combo.setEnabled((not in_progress) and self.current_df is not None)
+        self.scale_checkbox.setEnabled(not in_progress)
+        self.encode_checkbox.setEnabled(not in_progress)
+        self.test_size_spin.setEnabled(not in_progress)
+
+        if in_progress:
+            self.lbl_training_status.setText("Training in progress...")
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+        else:
             QApplication.restoreOverrideCursor()
+
+    def _on_train_succeeded(self, context: Dict[str, Any]) -> None:
+        self.last_run_context = context
+        self.btn_save_model.setEnabled(True)
+        self._show_metrics(context)
+        self._update_visualizations(context)
+        self.lbl_training_status.setText("Training completed")
+
+    def _on_train_failed(self, message: str) -> None:
+        self.lbl_training_status.setText("Training failed")
+        QMessageBox.critical(self, "Pipeline Error", message)
+
+    def _on_train_finished(self) -> None:
+        self._set_training_state(False)
+        self.run_worker = None
 
     def _format_metric(self, value: Any) -> str:
         if isinstance(value, (int, float, np.floating, np.integer)):
@@ -554,7 +630,7 @@ class MainWindow(QMainWindow):
 
             meta = payload["meta"]
             if meta.get("task") != "binary_classification":
-                raise ValueError("This model is not from the binary-classification MVP flow")
+                raise ValueError("This model is not from the binary-classification demo flow")
 
             feature_columns = meta.get("feature_columns")
             feature_dtypes = meta.get("feature_dtypes", {})

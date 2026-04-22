@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Dict, Any
 
 from core.yaml_parser import parse_pipeline
@@ -9,9 +10,13 @@ from core.handler_registry import get_handler_for_stage
 from core.run_logger import log_run  # add import
 
 def run_pipeline(yaml_path: str) -> Dict[str, Any]:
-    config = parse_pipeline(yaml_path)
+    resolved_yaml_path = Path(yaml_path).resolve()
+    config = parse_pipeline(resolved_yaml_path)
     print(f"[executor] Running pipeline: {config.pipeline_name!r}")
-    context: Dict[str, Any] = {}
+    context: Dict[str, Any] = {
+        "_pipeline_path": str(resolved_yaml_path),
+        "_pipeline_dir": str(resolved_yaml_path.parent),
+    }
 
     for stage in config.stages:
         print(f"[executor] Stage: {stage.name!r} (type={stage.type})")

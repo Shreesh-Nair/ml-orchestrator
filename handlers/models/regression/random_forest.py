@@ -22,7 +22,7 @@ class RandomForestRegressionHandler(BaseHandler):
         params = self.stage.params
         if "n_estimators" in params:
             n_estimators = int(params["n_estimators"])
-        if "max_depth" in params:
+        if "max_depth" in params and params["max_depth"] is not None:
             max_depth = int(params["max_depth"])
 
         # --- Training ---

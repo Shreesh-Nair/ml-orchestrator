@@ -5,9 +5,10 @@ import sys
 from pathlib import Path
 
 from core.executor import run_pipeline
+from core.paths import get_examples_dir
 
 
-EXAMPLES_DIR = Path("examples")
+EXAMPLES_DIR = get_examples_dir()
 
 
 def list_pipelines() -> None:
@@ -15,11 +16,6 @@ def list_pipelines() -> None:
     for yml in sorted(EXAMPLES_DIR.glob("*.yml")):
         print(f"  - {yml.stem} ({yml})")
 
-def preprocess_pipeline() -> None:
-    """Quick preprocess command for fraud detection pipeline."""
-    from handlers.preprocess import tabular_preprocess  # adjust import
-    print("Running preprocessing pipeline...")
-    tabular_preprocess()
 
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
@@ -52,11 +48,9 @@ def main(argv: list[str] | None = None) -> None:
                 raise SystemExit(f"Pipeline not found: {name_or_path}")
             path = candidate
 
-        run_pipeline(str(path))
+        run_pipeline(str(path.resolve()))
         return
-    if cmd == 'preprocess':
-        preprocess_pipeline()
-        return
+
     raise SystemExit(f"Unknown command: {cmd!r}")
 
 

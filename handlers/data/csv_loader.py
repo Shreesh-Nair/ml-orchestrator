@@ -1,11 +1,11 @@
 # handlers/data/csv_loader.py
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Dict, Any
 
 import pandas as pd
 
+from core.paths import resolve_source_path
 from handlers.base import BaseHandler
 
 
@@ -28,7 +28,10 @@ class CSVLoaderHandler(BaseHandler):
                 f"CSVLoaderHandler: 'target_column' must be a non-empty string, got {target_column!r}"
             )
 
-        path = Path(source)
+        path = resolve_source_path(
+            source,
+            pipeline_dir=context.get("_pipeline_dir"),
+        )
         if not path.exists():
             raise FileNotFoundError(f"CSV file not found: {path}")
 

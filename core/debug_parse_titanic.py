@@ -1,4 +1,4 @@
-from yaml_parser import parse_pipeline
+from core.yaml_parser import parse_pipeline
 
 def main() -> None:
     config = parse_pipeline("examples/titanic.yml")
