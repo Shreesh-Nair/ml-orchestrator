@@ -94,15 +94,126 @@ Priority 3:
 2. Performance tests on medium-size datasets to keep UI responsive.
 3. Basic reproducibility checks (fixed random state where appropriate).
 
-## Recommended Product Changes (Keeping UX Simple)
+## Product Direction (Simple but Robust)
 
-1. Add a template gallery with plain language entry points: "Churn", "Fraud", "House Price", "Customer Segments".
-2. Add a step-by-step wizard mode so first-time users do not see too many options at once.
-3. Add beginner-safe defaults and an "Advanced" panel for optional tuning.
-4. Add strong data checks with actionable messages before training starts.
-5. Add model cards after training with plain-language interpretation of metrics and risks.
-6. Add a stable project/session concept so users can reopen work without confusion.
-7. Add an update and rollback strategy for desktop releases to reduce support issues.
+This project is a strong idea, especially now. Many AI tools generate demos quickly, but very few become reliable desktop products that non-technical users can trust day to day.
+
+To stay practical and avoid complexity creep:
+
+1. Keep a wizard-first UX for all common workflows.
+2. Expose complexity progressively (Basic mode by default, Advanced optional).
+3. Prioritize reliability, validation, and clear error guidance over adding many toggles.
+4. Add new ML options as templates, not as one giant settings page.
+5. Build once, run anywhere on Windows without requiring Python installs.
+
+## Recommended Feature Roadmap
+
+The goal is to add many ML options while keeping the product easy to use.
+
+### Phase 1 - Core Robustness (Highest Priority)
+
+1. Project/session files so users can reopen and continue work.
+2. Better input validation and plain-language fix suggestions (missing columns, wrong target type, class imbalance).
+3. Predict tab improvements:
+	- Manual single-row input (already present, improve UX).
+	- Batch prediction via CSV.
+	- Output file export (CSV with predictions and probabilities/scores).
+4. Model lifecycle basics:
+	- Save/load model metadata and schema checks.
+	- Version labels for saved models.
+5. Reproducibility controls:
+	- Global random seed option.
+	- Run summary with config + metrics + artifact paths.
+
+### Phase 2 - Tabular ML Expansion
+
+1. Classification templates:
+	- Logistic Regression
+	- Random Forest
+	- Gradient Boosting / XGBoost-style option (if dependency choice permits)
+2. Regression templates:
+	- Linear Regression
+	- Random Forest Regressor
+	- ElasticNet/Ridge/Lasso options
+3. Anomaly detection templates:
+	- Isolation Forest
+	- One-Class SVM (optional advanced)
+	- Local Outlier Factor (optional advanced)
+4. Hyperparameter modes:
+	- Quick (safe defaults)
+	- Tune (grid/random search with time budget)
+	- Auto (best effort optimizer for selected task)
+
+### Phase 3 - Data Handling and Augmentation
+
+1. Built-in data quality report:
+	- Missing values, cardinality, outliers, leakage warnings.
+2. Feature preparation helpers:
+	- Date/time extraction
+	- Text basics (length, TF-IDF template)
+	- Categorical grouping for rare classes
+3. Augmentation options by modality:
+	- Tabular: noise/jitter and class balancing (SMOTE-like options where appropriate)
+	- Image: flip/rotate/crop/brightness presets
+	- Time-series: windowing and scaling templates
+4. Data split policies:
+	- Random split
+	- Stratified split
+	- Time-aware split
+
+### Phase 4 - Computer Vision Workflows
+
+1. Image classification workflow (folder-to-label and CSV label formats).
+2. Image augmentation pipeline with preview.
+3. Batch image inference with output CSV + copied/annotated outputs.
+4. Video object detection workflow:
+	- Pretrained model inference mode first.
+	- Export annotated video and detection CSV.
+5. Hardware awareness:
+	- Auto-detect CPU/GPU capability.
+	- Graceful fallback and performance warnings.
+
+### Phase 5 - Usability and Trust Features
+
+1. Template gallery with plain-language use cases:
+	- Churn prediction
+	- Fraud detection
+	- House price prediction
+	- Defect image classification
+2. Model cards in plain language:
+	- What the model predicts
+	- Confidence and limitations
+	- Recommended usage boundaries
+3. Explainability basics:
+	- Feature importance
+	- Per-row explanation summary (lightweight)
+4. Safer release channel:
+	- In-app version check
+	- Rollback-friendly installer strategy
+
+## Suggested UX Pattern (Keep It Easy)
+
+For every task, keep the same 6-step flow:
+
+1. Choose task template.
+2. Load data (manual file or folder).
+3. Validate and auto-fix suggestions.
+4. Train (Quick/Tune/Auto).
+5. Review metrics and artifacts.
+6. Predict (manual input or batch file), then export results.
+
+This consistency lets you support many ML options without overwhelming users.
+
+## Why This Project Is Worth Building
+
+Yes, this is a good project in the current AI landscape.
+
+Reasons it stands out:
+
+1. It targets real users who need outcomes, not code.
+2. It runs locally, which helps with privacy and reliability.
+3. It can become a practical "ML productivity tool" instead of a one-off demo.
+4. The existing architecture (pipeline stages + handlers + GUI) is a solid foundation for modular growth.
 
 ## Data and Artifacts Paths
 
