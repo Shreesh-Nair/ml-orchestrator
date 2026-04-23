@@ -47,6 +47,8 @@ class RandomForestRegressionHandler(BaseHandler):
         
         # --- Visualization Artifacts ---
         artifacts = {}
+        artifacts["y_test"] = np.asarray(y_test)
+        artifacts["y_pred"] = np.asarray(y_pred)
         
         # 1. Feature Importance (Supported by RF Regressor)
         if hasattr(model, "feature_importances_"):

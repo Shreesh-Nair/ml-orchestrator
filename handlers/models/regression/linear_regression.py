@@ -29,6 +29,8 @@ class LinearRegressionHandler(BaseHandler):
 
         # --- Visualization Artifacts ---
         artifacts = {}
+        artifacts["y_test"] = np.asarray(y_test)
+        artifacts["y_pred"] = np.asarray(y_pred)
 
         # 1. Feature Importance (Using absolute Coefficients)
         if hasattr(model, "coef_"):

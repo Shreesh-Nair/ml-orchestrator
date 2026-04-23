@@ -83,6 +83,33 @@ class PipelineRunWorker(QThread):
             self.failed.emit(str(exc))
 
 
+TASK_CONFIG: Dict[str, Dict[str, Any]] = {
+    "classification": {
+        "label": "Classification",
+        "models": [
+            ("Random Forest", "classification_rf"),
+            ("Logistic Regression", "classification_logreg"),
+        ],
+        "require_binary_target": True,
+    },
+    "regression": {
+        "label": "Regression",
+        "models": [
+            ("Random Forest Regressor", "regression_rf"),
+            ("Linear Regression", "regression_linear"),
+        ],
+        "require_binary_target": False,
+    },
+    "anomaly": {
+        "label": "Anomaly Detection",
+        "models": [
+            ("Isolation Forest", "anomaly_isolation_forest"),
+        ],
+        "require_binary_target": True,
+    },
+}
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -100,6 +127,9 @@ class MainWindow(QMainWindow):
         self.prediction_schema: List[Dict[str, str]] = []
         self.prediction_allowed_values: Dict[str, List[str]] = {}
         self.run_worker: PipelineRunWorker | None = None
+
+        self.selected_task: str = "classification"
+        self.selected_model_type: str = "classification_rf"
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -147,13 +177,20 @@ class MainWindow(QMainWindow):
 
         task_row = QHBoxLayout()
         task_row.addWidget(QLabel("Task:"))
-        task_row.addWidget(QLabel("Binary Classification (Demo)"))
+        self.task_combo = QComboBox()
+        self.task_combo.addItem("Classification", "classification")
+        self.task_combo.addItem("Regression", "regression")
+        self.task_combo.addItem("Anomaly Detection", "anomaly")
+        self.task_combo.currentIndexChanged.connect(self.on_task_changed)
+        task_row.addWidget(self.task_combo)
         task_row.addStretch()
         top_layout.addLayout(task_row)
 
         algo_row = QHBoxLayout()
         algo_row.addWidget(QLabel("Algorithm:"))
-        algo_row.addWidget(QLabel("RandomForest (Demo)"))
+        self.model_combo = QComboBox()
+        self.model_combo.currentIndexChanged.connect(self.on_model_changed)
+        algo_row.addWidget(self.model_combo)
         algo_row.addStretch()
         top_layout.addLayout(algo_row)
 
@@ -235,6 +272,8 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(viz_widget)
         splitter.setSizes([420, 480])
+
+        self._refresh_model_options()
 
     def setup_predict_tab(self, tab: QWidget) -> None:
         layout = QHBoxLayout(tab)
@@ -354,7 +393,34 @@ class MainWindow(QMainWindow):
         if index >= 0:
             self.target_column = self.target_combo.itemText(index)
 
-    def _validate_binary_target(self) -> Dict[str, int]:
+    def on_task_changed(self, index: int) -> None:
+        task = self.task_combo.itemData(index)
+        if isinstance(task, str) and task in TASK_CONFIG:
+            self.selected_task = task
+        self._refresh_model_options()
+
+    def on_model_changed(self, index: int) -> None:
+        model_type = self.model_combo.itemData(index)
+        if isinstance(model_type, str):
+            self.selected_model_type = model_type
+
+    def _refresh_model_options(self) -> None:
+        task_cfg = TASK_CONFIG.get(self.selected_task, TASK_CONFIG["classification"])
+        model_options = task_cfg["models"]
+
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        for label, model_type in model_options:
+            self.model_combo.addItem(label, model_type)
+        self.model_combo.blockSignals(False)
+
+        if self.model_combo.count() > 0:
+            self.model_combo.setCurrentIndex(0)
+            selected = self.model_combo.currentData()
+            if isinstance(selected, str):
+                self.selected_model_type = selected
+
+    def _validate_target_for_task(self) -> Dict[str, int]:
         if self.current_df is None:
             raise ValueError("Please select a CSV file first.")
         if not self.target_column or self.target_column not in self.current_df.columns:
@@ -365,17 +431,22 @@ class MainWindow(QMainWindow):
             raise ValueError("Target column is empty after removing missing values.")
 
         class_counts = target.value_counts(dropna=False)
-        if len(class_counts) != 2:
-            raise ValueError(
-                "Target must have exactly 2 classes for this demo. "
-                f"Found {len(class_counts)} classes: {list(class_counts.index)}"
-            )
-        if int(class_counts.min()) < 2:
-            raise ValueError(
-                "Each class must have at least 2 rows for train/test split. "
-                f"Class counts: {class_counts.to_dict()}"
-            )
+        task_cfg = TASK_CONFIG.get(self.selected_task, TASK_CONFIG["classification"])
+        if bool(task_cfg.get("require_binary_target", False)):
+            if len(class_counts) != 2:
+                raise ValueError(
+                    f"{task_cfg['label']} requires exactly 2 target classes. "
+                    f"Found {len(class_counts)} classes: {list(class_counts.index)}"
+                )
+            if int(class_counts.min()) < 2:
+                raise ValueError(
+                    "Each class must have at least 2 rows for train/test split. "
+                    f"Class counts: {class_counts.to_dict()}"
+                )
         return class_counts.to_dict()
+
+    def _validate_binary_target(self) -> Dict[str, int]:
+        return self._validate_target_for_task()
 
     def on_run_clicked(self) -> None:
         if self.run_worker is not None and self.run_worker.isRunning():
@@ -386,7 +457,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self._validate_binary_target()
+            self._validate_target_for_task()
         except Exception as exc:
             QMessageBox.warning(self, "Invalid Target", str(exc))
             return
@@ -426,7 +497,8 @@ class MainWindow(QMainWindow):
         self.btn_save_model.setEnabled(True)
         self._show_metrics(context)
         self._update_visualizations(context)
-        self.lbl_training_status.setText("Training completed")
+        task_label = TASK_CONFIG.get(self.selected_task, {}).get("label", "Task")
+        self.lbl_training_status.setText(f"Training completed ({task_label})")
 
     def _on_train_failed(self, message: str) -> None:
         self.lbl_training_status.setText("Training failed")
@@ -445,7 +517,13 @@ class MainWindow(QMainWindow):
 
     def _show_metrics(self, context: Dict[str, Any]) -> None:
         metrics = context.get("metrics") or {}
-        preferred_order = ["accuracy", "precision", "recall", "f1", "roc_auc"]
+        if self.selected_task == "regression":
+            preferred_order = ["rmse", "r2"]
+        elif self.selected_task == "anomaly":
+            metrics = context.get("anomaly_metrics") or metrics
+            preferred_order = ["auc", "precision", "recall", "f1"]
+        else:
+            preferred_order = ["accuracy", "precision", "recall", "f1", "roc_auc"]
 
         ordered_keys: List[str] = [key for key in preferred_order if key in metrics]
         ordered_keys.extend([key for key in metrics.keys() if key not in ordered_keys])
@@ -462,6 +540,84 @@ class MainWindow(QMainWindow):
 
         if not artifacts:
             self.viz_tabs.addTab(QLabel("No visualization data available."), "Info")
+            return
+
+        if self.selected_task == "regression":
+            if "y_test" in artifacts and "y_pred" in artifacts:
+                y_test = np.asarray(artifacts["y_test"])
+                y_pred = np.asarray(artifacts["y_pred"])
+
+                canvas = MplCanvas(self, width=5, height=4, dpi=100)
+                ax = canvas.axes
+                ax.scatter(y_test, y_pred, alpha=0.7)
+
+                diagonal_min = float(min(np.min(y_test), np.min(y_pred)))
+                diagonal_max = float(max(np.max(y_test), np.max(y_pred)))
+                ax.plot([diagonal_min, diagonal_max], [diagonal_min, diagonal_max], "r--", linewidth=1.5)
+
+                ax.set_xlabel("Actual", fontsize=9)
+                ax.set_ylabel("Predicted", fontsize=9)
+                ax.set_title("Actual vs Predicted", fontsize=10)
+                canvas.figure.tight_layout()
+                self.viz_tabs.addTab(canvas, "Predictions")
+
+            if "feature_importance" in artifacts:
+                importances = np.asarray(artifacts["feature_importance"])
+                if importances.ndim == 1 and len(importances) > 0:
+                    names = artifacts.get("feature_names", [f"feature_{i}" for i in range(len(importances))])
+                    sorted_idx = np.argsort(importances)[::-1][:10]
+
+                    canvas = MplCanvas(self, width=5, height=4, dpi=100)
+                    ax = canvas.axes
+                    ax.bar(range(len(sorted_idx)), importances[sorted_idx], align="center")
+                    ax.set_xticks(range(len(sorted_idx)))
+
+                    clean_names: List[str] = []
+                    for idx in sorted_idx:
+                        label = str(names[idx]).split("__")[-1]
+                        if len(label) > 20:
+                            label = f"{label[:17]}..."
+                        clean_names.append(label)
+
+                    ax.set_xticklabels(clean_names, rotation=45, ha="right", fontsize=9)
+                    ax.set_title("Top Feature Importances", fontsize=10)
+                    canvas.figure.tight_layout()
+                    self.viz_tabs.addTab(canvas, "Feature Importance")
+
+            if self.viz_tabs.count() == 0:
+                self.viz_tabs.addTab(QLabel("No visualization data available for regression."), "Info")
+            return
+
+        if self.selected_task == "anomaly":
+            if "anomaly_scores" in artifacts:
+                scores = np.asarray(artifacts["anomaly_scores"])
+
+                canvas = MplCanvas(self, width=5, height=4, dpi=100)
+                ax = canvas.axes
+                ax.hist(scores, bins=min(30, max(5, int(np.sqrt(len(scores))))), color="#4C78A8", alpha=0.85)
+                ax.set_xlabel("Anomaly Score", fontsize=9)
+                ax.set_ylabel("Count", fontsize=9)
+                ax.set_title("Anomaly Score Distribution", fontsize=10)
+                canvas.figure.tight_layout()
+                self.viz_tabs.addTab(canvas, "Score Distribution")
+
+            if "y_test" in artifacts and "anomaly_preds" in artifacts:
+                from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+
+                y_test = np.asarray(artifacts["y_test"])
+                preds = np.asarray(artifacts["anomaly_preds"])
+                labels = np.asarray([0, 1])
+                cm = confusion_matrix(y_test, preds, labels=labels)
+
+                canvas = MplCanvas(self, width=5, height=4, dpi=100)
+                display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Normal", "Anomaly"])
+                display.plot(ax=canvas.axes, cmap="Oranges", colorbar=True)
+                canvas.axes.set_title("Anomaly Detection Confusion Matrix", fontsize=10)
+                canvas.figure.tight_layout()
+                self.viz_tabs.addTab(canvas, "Confusion Matrix")
+
+            if self.viz_tabs.count() == 0:
+                self.viz_tabs.addTab(QLabel("No visualization data available for anomaly detection."), "Info")
             return
 
         if "y_test" in artifacts and "y_pred" in artifacts:
@@ -536,8 +692,12 @@ class MainWindow(QMainWindow):
     def _write_generated_yaml(self) -> Path:
         import yaml
 
+        task_cfg = TASK_CONFIG.get(self.selected_task, TASK_CONFIG["classification"])
+        model_type = self.selected_model_type
+        pipeline_name = f"{self.selected_task}_{model_type}_gui_run"
+
         config = {
-            "pipeline_name": "binary_classification_gui_run",
+            "pipeline_name": pipeline_name,
             "stages": [
                 {
                     "name": "load_data",
@@ -552,8 +712,8 @@ class MainWindow(QMainWindow):
                     "type": "tabular_preprocess",
                     "params": {
                         "target_column": self.target_column,
-                        "task_type": "classification",
-                        "require_binary_target": True,
+                        "task_type": self.selected_task,
+                        "require_binary_target": bool(task_cfg.get("require_binary_target", False)),
                         "scale_numeric": self.scale_checkbox.isChecked(),
                         "encode_categoricals": self.encode_checkbox.isChecked(),
                         "test_size": float(self.test_size_spin.value()),
@@ -562,13 +722,13 @@ class MainWindow(QMainWindow):
                 },
                 {
                     "name": "model",
-                    "type": "classification_rf",
+                    "type": model_type,
                     "params": {"random_state": int(self.random_seed_spin.value())},
                 },
             ],
         }
 
-        yaml_path = GENERATED_DIR / "binary_classification_gui_run.yml"
+        yaml_path = GENERATED_DIR / f"{pipeline_name}.yml"
         with yaml_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(config, f, sort_keys=False)
         return yaml_path
@@ -579,7 +739,10 @@ class MainWindow(QMainWindow):
             return
 
         context = self.last_run_context
+        task_cfg = TASK_CONFIG.get(self.selected_task, TASK_CONFIG["classification"])
         model = context.get("model")
+        if model is None and self.selected_task == "anomaly":
+            model = context.get("anomaly_model")
         preprocessor = context.get("preprocessor")
         if model is None:
             QMessageBox.warning(self, "Save Error", "No trained model found in the last run.")
@@ -612,7 +775,7 @@ class MainWindow(QMainWindow):
                 if values:
                     feature_allowed_values[feature] = values
 
-        default_name = f"binary_rf_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pkl"
+        default_name = f"{self.selected_task}_{self.selected_model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pkl"
         path_str, _ = QFileDialog.getSaveFileName(
             self,
             "Save Model",
@@ -623,8 +786,9 @@ class MainWindow(QMainWindow):
             return
 
         meta = {
-            "task": "binary_classification",
-            "algorithm": "RandomForest",
+            "task": self.selected_task,
+            "algorithm": self.model_combo.currentText() if self.model_combo.currentText() else self.selected_model_type,
+            "model_type": self.selected_model_type,
             "dataset": self.csv_path.name if self.csv_path else "unknown",
             "target": self.target_column,
             "feature_columns": feature_columns,
@@ -633,6 +797,7 @@ class MainWindow(QMainWindow):
             "class_labels": [str(label) if isinstance(label, Path) else label for label in class_labels],
             "positive_label": artifacts.get("positive_label"),
             "preprocess": {
+                "task": task_cfg.get("label", self.selected_task),
                 "scale_numeric": self.scale_checkbox.isChecked(),
                 "encode_categoricals": self.encode_checkbox.isChecked(),
                 "test_size": float(self.test_size_spin.value()),
@@ -685,8 +850,11 @@ class MainWindow(QMainWindow):
                 raise ValueError("Invalid model file format")
 
             meta = payload["meta"]
-            if meta.get("task") != "binary_classification":
-                raise ValueError("This model is not from the binary-classification demo flow")
+            model_task = str(meta.get("task", "binary_classification"))
+            if model_task == "binary_classification":
+                model_task = "classification"
+            if model_task not in TASK_CONFIG:
+                raise ValueError(f"Unsupported model task: {model_task}")
 
             feature_columns = meta.get("feature_columns")
             feature_dtypes = meta.get("feature_dtypes", {})
@@ -709,6 +877,7 @@ class MainWindow(QMainWindow):
             classes_text = ", ".join([str(c) for c in meta.get("class_labels", [])])
 
             self.lbl_model_info.setText(
+                f"Task: {model_task}\n"
                 f"Algorithm: {meta.get('algorithm')}\n"
                 f"Dataset: {meta.get('dataset')}\n"
                 f"Target: {meta.get('target')}\n"
@@ -822,6 +991,9 @@ class MainWindow(QMainWindow):
         meta = self.loaded_model_payload.get("meta", {})
         model = objects.get("model")
         preprocessor = objects.get("preprocessor")
+        model_task = str(meta.get("task", "classification"))
+        if model_task == "binary_classification":
+            model_task = "classification"
 
         if model is None:
             QMessageBox.critical(self, "Prediction Error", "Loaded file does not contain a model.")
@@ -839,15 +1011,23 @@ class MainWindow(QMainWindow):
             X = preprocessor.transform(input_df) if preprocessor is not None else input_df
 
             prediction = model.predict(X)[0]
-            result = f"Predicted class: {prediction}"
-
-            if hasattr(model, "predict_proba"):
-                probs = model.predict_proba(X)[0]
-                classes = list(getattr(model, "classes_", meta.get("class_labels", [])))
-                positive_label = meta.get("positive_label")
-                if positive_label in classes:
-                    positive_idx = classes.index(positive_label)
-                    result += f" | P({positive_label}) = {float(probs[positive_idx]):.3f}"
+            if model_task == "regression":
+                result = f"Predicted value: {float(prediction):.4f}"
+            elif model_task == "anomaly":
+                anomaly_label = "Anomaly" if int(prediction) == -1 else "Normal"
+                result = f"Predicted status: {anomaly_label}"
+                if hasattr(model, "decision_function"):
+                    score = -float(model.decision_function(X)[0])
+                    result += f" | anomaly score = {score:.4f}"
+            else:
+                result = f"Predicted class: {prediction}"
+                if hasattr(model, "predict_proba"):
+                    probs = model.predict_proba(X)[0]
+                    classes = list(getattr(model, "classes_", meta.get("class_labels", [])))
+                    positive_label = meta.get("positive_label")
+                    if positive_label in classes:
+                        positive_idx = classes.index(positive_label)
+                        result += f" | P({positive_label}) = {float(probs[positive_idx]):.3f}"
 
             self.lbl_prediction_result.setText(result)
         except ValueError as exc:

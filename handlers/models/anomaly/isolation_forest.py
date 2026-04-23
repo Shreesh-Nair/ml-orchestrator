@@ -82,6 +82,11 @@ class IsolationForestHandler(BaseHandler):
         context["anomaly_scores"] = scores
         context["anomaly_preds"] = preds
         context["anomaly_metrics"] = metrics
+        context["artifacts"] = {
+            "y_test": y_true,
+            "anomaly_scores": scores,
+            "anomaly_preds": preds,
+        }
 
         print(
             "[isolation_forest] contamination="
