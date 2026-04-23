@@ -215,6 +215,116 @@ Reasons it stands out:
 3. It can become a practical "ML productivity tool" instead of a one-off demo.
 4. The existing architecture (pipeline stages + handlers + GUI) is a solid foundation for modular growth.
 
+## Master Backlog To Tentative Final Version
+
+This section is the full feature/change checklist from the current demo to a tentative final version.
+
+### Phase 0 - Product Guardrails
+
+1. Define core user personas and top use cases.
+2. Freeze UX rules (wizard-first, safe defaults, advanced options hidden by default).
+3. Define quality bars for reliability, save/load integrity, and packaging stability.
+
+### Phase 1 - Core Reliability Foundation
+
+1. Add project/session management (new, save, open, resume).
+2. Add stronger data validation and schema checks (target type, missing columns, leakage hints, class imbalance warnings).
+3. Standardize artifact handling (models, logs, generated pipelines, exports).
+4. Improve user-facing error messages with clear next steps.
+5. Add reproducibility controls (seed, config snapshot, run metadata summary).
+
+### Phase 2 - Prediction Workflows
+
+1. Improve manual single-row prediction UX.
+2. Add batch prediction from CSV.
+3. Export prediction outputs to CSV (labels, confidence/probability, anomaly scores, row ids).
+4. Add output profile presets (simple vs detailed output columns).
+
+### Phase 3 - Tabular ML Expansion
+
+1. Classification options: Logistic Regression, Random Forest, Gradient Boosting.
+2. Regression options: Linear Regression, Random Forest Regressor, Ridge/Lasso/ElasticNet.
+3. Anomaly options: Isolation Forest, LOF, One-Class SVM (advanced).
+4. Explainability baseline: feature importance and lightweight per-row explanations.
+5. Template gallery entries: churn, fraud, house price, customer risk, demand forecasting.
+
+### Phase 4 - Hyperparameter and Auto Optimization
+
+1. Add three training modes: Quick, Tune, Auto-Optimal.
+2. Quick mode uses stable defaults and low runtime.
+3. Tune mode exposes selected parameters with safe ranges and time budget.
+4. Auto-Optimal mode runs best-effort search and selects best model.
+5. Add training budget controls (max time, max trials, early stop).
+6. Show side-by-side baseline vs tuned metrics.
+
+### Phase 5 - Data Handling and Augmentation
+
+1. Built-in data quality report (missingness, outliers, cardinality, skew, leakage hints).
+2. Feature helpers (date expansion, text basics, rare-category handling).
+3. Class imbalance strategies (weights, resampling options).
+4. Tabular augmentation options with safety guidance.
+5. Split policies: random, stratified, time-aware.
+
+### Phase 6 - Vision Workflows
+
+1. Image classification inference workflow first.
+2. Image classification training workflow using transfer-learning templates.
+3. Image augmentation presets with preview.
+4. Video object detection inference workflow.
+5. Export outputs for vision workflows (annotated images/videos and CSV detections).
+6. Hardware awareness and fallback (GPU detect, CPU fallback, runtime warnings).
+
+### Phase 7 - Usability and Trust Enhancements
+
+1. Keep a consistent 6-step wizard flow across tasks.
+2. Add model cards in plain language (what, confidence, limitations).
+3. Improve visual reporting (ROC/PR, residuals, confusion matrix, anomaly ranking).
+4. Add in-app help and contextual next-step suggestions.
+5. Add accessibility improvements (readability, keyboard support, simple defaults).
+
+### Phase 8 - Standalone Distribution and Operations
+
+1. Keep installer-first distribution for non-technical users.
+2. Add optional portable zip distribution for advanced users.
+3. Add build reproducibility checks and release validation scripts.
+4. Add diagnostics bundle export for support cases.
+5. Add safe update strategy and rollback guidance.
+6. Maintain dependency pinning and vulnerability checks.
+
+### Phase 9 - Testing and Quality Gates
+
+1. Expand unit tests for handlers, parser, and paths.
+2. Add full integration tests for major workflows.
+3. Add GUI smoke tests for key user journeys.
+4. Add model save/load compatibility tests across versions.
+5. Add packaging smoke tests on clean Windows machines.
+6. Add performance checks for medium datasets.
+7. Add regression tests for generated pipeline configs.
+
+### Phase 10 - Tentative Final Version Definition
+
+A tentative final version is reached when all of the following are true:
+
+1. Clean Windows install works without Python or manual dependency setup.
+2. Tabular workflows are stable for classification, regression, and anomaly tasks.
+3. Prediction supports both manual input and batch file input with export.
+4. Quick, Tune, and Auto-Optimal training modes are stable and understandable.
+5. Validation and error guidance are strong enough for non-technical users.
+6. Project/session management and model library are robust.
+7. Vision workflows support at least image classification and video detection inference.
+8. Automated tests and packaging checks are release-grade.
+9. Documentation and in-app guidance are sufficient for first-time users.
+
+### Recommended Implementation Order
+
+1. Phase 1 + Phase 2
+2. Phase 3 + Phase 4
+3. Phase 8 + Phase 9
+4. Phase 5
+5. Phase 6
+6. Phase 7
+7. Final hardening against Phase 10 checklist
+
 ## Data and Artifacts Paths
 
 Runtime resources (read-only app assets):
