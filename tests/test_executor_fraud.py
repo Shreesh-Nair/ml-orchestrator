@@ -12,3 +12,9 @@ def test_run_fraud_anomaly_pipeline_has_anomaly_metrics():
     assert "precision" in m
     assert "recall" in m
     assert "f1" in m
+
+    assert "artifacts" in context
+    artifacts = context["artifacts"]
+    assert "y_test" in artifacts
+    assert "anomaly_scores" in artifacts
+    assert "anomaly_preds" in artifacts

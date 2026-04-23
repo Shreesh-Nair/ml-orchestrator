@@ -44,9 +44,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.executor import run_pipeline
+from core.prediction import predict_dataframe
 from core.paths import (
     get_data_dir,
     get_demo_dataset_path,
+    get_exports_dir,
     get_generated_pipelines_dir,
     get_models_dir,
     get_projects_dir,
@@ -58,6 +60,7 @@ DATA_DIR = get_data_dir()
 GENERATED_DIR = get_generated_pipelines_dir()
 MODELS_DIR = get_models_dir()
 PROJECTS_DIR = get_projects_dir()
+EXPORTS_DIR = get_exports_dir()
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -126,6 +129,8 @@ class MainWindow(QMainWindow):
         self.prediction_inputs: Dict[str, Any] = {}
         self.prediction_schema: List[Dict[str, str]] = []
         self.prediction_allowed_values: Dict[str, List[str]] = {}
+        self.batch_input_df: pd.DataFrame | None = None
+        self.batch_input_path: Path | None = None
         self.run_worker: PipelineRunWorker | None = None
 
         self.selected_task: str = "classification"
@@ -318,6 +323,20 @@ class MainWindow(QMainWindow):
         self.btn_predict.setStyleSheet("font-weight: bold; padding: 10px; background-color: #e0f7fa; color: black;")
         self.btn_predict.clicked.connect(self.on_predict_clicked)
         right_layout.addWidget(self.btn_predict)
+
+        batch_row = QHBoxLayout()
+        self.btn_load_batch = QPushButton("Load Batch CSV")
+        self.btn_load_batch.clicked.connect(self.on_load_batch_csv_clicked)
+        self.btn_batch_predict = QPushButton("Batch Predict + Export")
+        self.btn_batch_predict.setEnabled(False)
+        self.btn_batch_predict.clicked.connect(self.on_batch_predict_clicked)
+        batch_row.addWidget(self.btn_load_batch)
+        batch_row.addWidget(self.btn_batch_predict)
+        right_layout.addLayout(batch_row)
+
+        self.lbl_batch_status = QLabel("Batch input: not loaded")
+        self.lbl_batch_status.setStyleSheet("font-size: 12px; color: #555;")
+        right_layout.addWidget(self.lbl_batch_status)
 
         self.lbl_prediction_warning = QLabel("")
         self.lbl_prediction_warning.setWordWrap(True)
@@ -838,11 +857,15 @@ class MainWindow(QMainWindow):
 
         model_path = MODELS_DIR / item.text()
         self.btn_predict.setEnabled(False)
+        self.btn_batch_predict.setEnabled(False)
         self.loaded_model_payload = None
         self.prediction_schema = []
         self.prediction_allowed_values = {}
+        self.batch_input_df = None
+        self.batch_input_path = None
         self.lbl_prediction_result.setText("Result: -")
         self.lbl_prediction_warning.setText("")
+        self.lbl_batch_status.setText("Batch input: not loaded")
 
         try:
             payload = joblib.load(model_path)
@@ -890,6 +913,7 @@ class MainWindow(QMainWindow):
             self._generate_prediction_form(self.prediction_schema)
             self._update_prediction_warnings()
             self.btn_predict.setEnabled(True)
+            self.btn_batch_predict.setEnabled(self.batch_input_df is not None)
         except Exception as exc:
             self.lbl_model_info.setText(f"Error loading model: {exc}")
 
@@ -1034,6 +1058,65 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Input Error", str(exc))
         except Exception as exc:
             QMessageBox.critical(self, "Prediction Error", str(exc))
+
+    def on_load_batch_csv_clicked(self) -> None:
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Batch CSV",
+            str(DATA_DIR),
+            "CSV Files (*.csv)",
+        )
+        if not path_str:
+            return
+
+        csv_path = Path(path_str)
+        try:
+            df = pd.read_csv(csv_path)
+            if df.empty:
+                raise ValueError("Batch CSV has no rows")
+
+            self.batch_input_df = df
+            self.batch_input_path = csv_path
+            self.lbl_batch_status.setText(
+                f"Batch input: {csv_path.name} ({df.shape[0]} rows, {df.shape[1]} cols)"
+            )
+            self.btn_batch_predict.setEnabled(self.loaded_model_payload is not None)
+        except Exception as exc:
+            self.batch_input_df = None
+            self.batch_input_path = None
+            self.btn_batch_predict.setEnabled(False)
+            QMessageBox.critical(self, "Batch CSV Error", str(exc))
+
+    def on_batch_predict_clicked(self) -> None:
+        if self.loaded_model_payload is None:
+            QMessageBox.warning(self, "Batch Prediction", "Please load a saved model first.")
+            return
+        if self.batch_input_df is None:
+            QMessageBox.warning(self, "Batch Prediction", "Please load a batch CSV first.")
+            return
+
+        try:
+            output_df = predict_dataframe(self.loaded_model_payload, self.batch_input_df)
+
+            default_input = self.batch_input_path.stem if self.batch_input_path else "batch"
+            default_name = f"{default_input}_predictions_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            out_path_str, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Batch Predictions",
+                str(EXPORTS_DIR / default_name),
+                "CSV Files (*.csv)",
+            )
+            if not out_path_str:
+                return
+
+            out_path = Path(out_path_str)
+            output_df.to_csv(out_path, index=False)
+            self.lbl_batch_status.setText(
+                f"Batch output: {out_path.name} ({output_df.shape[0]} rows)"
+            )
+            QMessageBox.information(self, "Batch Prediction Complete", f"Saved predictions to:\n{out_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Batch Prediction Error", str(exc))
 
     def _session_payload(self) -> Dict[str, Any]:
         return {
