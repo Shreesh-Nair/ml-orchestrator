@@ -19,6 +19,7 @@ class LogisticRegressionHandler(BaseHandler):
         # Default to some standard params
         C: float = 1.0
         max_iter: int = 100
+        random_state: int = int(context.get("_random_seed", 42))
         
         # Parse params from YAML
         params = self.stage.params
@@ -26,9 +27,11 @@ class LogisticRegressionHandler(BaseHandler):
             C = float(params["C"])
         if "max_iter" in params:
             max_iter = int(params["max_iter"])
+        if "random_state" in params:
+            random_state = int(params["random_state"])
 
         # --- Training ---
-        model = LogisticRegression(C=C, max_iter=max_iter, random_state=42)
+        model = LogisticRegression(C=C, max_iter=max_iter, random_state=random_state)
         model.fit(X_train, y_train)
 
         # --- Predictions ---

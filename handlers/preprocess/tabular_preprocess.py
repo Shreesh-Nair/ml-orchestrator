@@ -37,11 +37,17 @@ class TabularPreprocessHandler(BaseHandler):
         X = df.drop(columns=[target_column]).copy()
         y = df[target_column].copy()
 
+        if X.shape[1] == 0:
+            raise ValueError("TabularPreprocessHandler: dataset must include at least one feature column")
+        if len(df) < 4:
+            raise ValueError("TabularPreprocessHandler: at least 4 rows are required for train/test split")
+
         # Read preprocessing params
         impute_missing = bool(self.stage.params.get("impute_missing", True))
         scale_numeric = bool(self.stage.params.get("scale_numeric", True))
         encode_categoricals = bool(self.stage.params.get("encode_categoricals", True))
         test_size = float(self.stage.params.get("test_size", 0.2))
+        random_state = int(self.stage.params.get("random_state", context.get("_random_seed", 42)))
         task_type = str(self.stage.params.get("task_type", "classification")).strip().lower()
         require_binary_target = bool(
             self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
@@ -111,14 +117,14 @@ class TabularPreprocessHandler(BaseHandler):
 
         if task_type == "regression":
             X_train, X_test, y_train, y_test = train_test_split(
-                X_processed, y, test_size=test_size, random_state=42
+                X_processed, y, test_size=test_size, random_state=random_state
             )
         else:
             X_train, X_test, y_train, y_test = train_test_split(
                 X_processed,
                 y,
                 test_size=test_size,
-                random_state=42,
+                random_state=random_state,
                 stratify=y,
             )
 
@@ -130,6 +136,7 @@ class TabularPreprocessHandler(BaseHandler):
         context["feature_columns"] = X.columns.tolist()
         context["feature_dtypes"] = {col: str(X[col].dtype) for col in X.columns}
         context["target_class_counts"] = class_counts.to_dict()
+        context["_random_seed"] = random_state
         if require_binary_target:
             context["class_labels"] = class_counts.index.tolist()
 

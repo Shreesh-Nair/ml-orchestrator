@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import math
 import sys
 from pathlib import Path
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSplitter,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -47,6 +49,7 @@ from core.paths import (
     get_demo_dataset_path,
     get_generated_pipelines_dir,
     get_models_dir,
+    get_projects_dir,
 )
 
 matplotlib.use("QtAgg")
@@ -54,6 +57,7 @@ matplotlib.use("QtAgg")
 DATA_DIR = get_data_dir()
 GENERATED_DIR = get_generated_pipelines_dir()
 MODELS_DIR = get_models_dir()
+PROJECTS_DIR = get_projects_dir()
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -90,6 +94,7 @@ class MainWindow(QMainWindow):
 
         self.last_run_context: Dict[str, Any] | None = None
         self.loaded_model_payload: Dict[str, Any] | None = None
+        self.current_session_path: Path | None = None
 
         self.prediction_inputs: Dict[str, QLineEdit] = {}
         self.prediction_schema: List[Dict[str, str]] = []
@@ -128,6 +133,16 @@ class MainWindow(QMainWindow):
         file_row.addWidget(self.btn_browse_csv)
         file_row.addWidget(self.btn_run_demo)
         top_layout.addLayout(file_row)
+
+        session_row = QHBoxLayout()
+        self.btn_save_session = QPushButton("Save Session")
+        self.btn_save_session.clicked.connect(self.on_save_session_clicked)
+        self.btn_load_session = QPushButton("Load Session")
+        self.btn_load_session.clicked.connect(self.on_load_session_clicked)
+        session_row.addWidget(self.btn_save_session)
+        session_row.addWidget(self.btn_load_session)
+        session_row.addStretch()
+        top_layout.addLayout(session_row)
 
         task_row = QHBoxLayout()
         task_row.addWidget(QLabel("Task:"))
@@ -173,6 +188,15 @@ class MainWindow(QMainWindow):
         test_row.addWidget(self.test_size_label)
         test_row.addStretch()
         prep_layout.addLayout(test_row)
+
+        seed_row = QHBoxLayout()
+        seed_row.addWidget(QLabel("Random seed:"))
+        self.random_seed_spin = QSpinBox()
+        self.random_seed_spin.setRange(0, 999999)
+        self.random_seed_spin.setValue(42)
+        seed_row.addWidget(self.random_seed_spin)
+        seed_row.addStretch()
+        prep_layout.addLayout(seed_row)
 
         prep_group.setLayout(prep_layout)
         top_layout.addWidget(prep_group)
@@ -381,6 +405,9 @@ class MainWindow(QMainWindow):
         self.scale_checkbox.setEnabled(not in_progress)
         self.encode_checkbox.setEnabled(not in_progress)
         self.test_size_spin.setEnabled(not in_progress)
+        self.random_seed_spin.setEnabled(not in_progress)
+        self.btn_save_session.setEnabled(not in_progress)
+        self.btn_load_session.setEnabled(not in_progress)
 
         if in_progress:
             self.lbl_training_status.setText("Training in progress...")
@@ -524,12 +551,13 @@ class MainWindow(QMainWindow):
                         "scale_numeric": self.scale_checkbox.isChecked(),
                         "encode_categoricals": self.encode_checkbox.isChecked(),
                         "test_size": float(self.test_size_spin.value()),
+                        "random_state": int(self.random_seed_spin.value()),
                     },
                 },
                 {
                     "name": "model",
                     "type": "classification_rf",
-                    "params": {},
+                    "params": {"random_state": int(self.random_seed_spin.value())},
                 },
             ],
         }
@@ -583,6 +611,7 @@ class MainWindow(QMainWindow):
                 "scale_numeric": self.scale_checkbox.isChecked(),
                 "encode_categoricals": self.encode_checkbox.isChecked(),
                 "test_size": float(self.test_size_spin.value()),
+                "random_seed": int(self.random_seed_spin.value()),
             },
             "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "metrics": context.get("metrics", {}),
@@ -742,6 +771,79 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Input Error", str(exc))
         except Exception as exc:
             QMessageBox.critical(self, "Prediction Error", str(exc))
+
+    def _session_payload(self) -> Dict[str, Any]:
+        return {
+            "version": 1,
+            "saved_at": datetime.datetime.now().isoformat(),
+            "csv_path": str(self.csv_path) if self.csv_path else None,
+            "target_column": self.target_column,
+            "preprocess": {
+                "scale_numeric": self.scale_checkbox.isChecked(),
+                "encode_categoricals": self.encode_checkbox.isChecked(),
+                "test_size": float(self.test_size_spin.value()),
+                "random_seed": int(self.random_seed_spin.value()),
+            },
+        }
+
+    def on_save_session_clicked(self) -> None:
+        default_name = f"session_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Session",
+            str((self.current_session_path or (PROJECTS_DIR / default_name)).resolve()),
+            "Session Files (*.json)",
+        )
+        if not path_str:
+            return
+
+        session_path = Path(path_str)
+        try:
+            session_path.write_text(json.dumps(self._session_payload(), indent=2), encoding="utf-8")
+            self.current_session_path = session_path
+            QMessageBox.information(self, "Session Saved", f"Saved session to:\n{session_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Session Save Error", str(exc))
+
+    def on_load_session_clicked(self) -> None:
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Session",
+            str(PROJECTS_DIR),
+            "Session Files (*.json)",
+        )
+        if not path_str:
+            return
+
+        session_path = Path(path_str)
+        try:
+            payload = json.loads(session_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("Session file must contain a JSON object")
+
+            preprocess = payload.get("preprocess") or {}
+            self.scale_checkbox.setChecked(bool(preprocess.get("scale_numeric", True)))
+            self.encode_checkbox.setChecked(bool(preprocess.get("encode_categoricals", True)))
+            self.test_size_spin.setValue(float(preprocess.get("test_size", 0.2)))
+            self.random_seed_spin.setValue(int(preprocess.get("random_seed", 42)))
+
+            csv_path = payload.get("csv_path")
+            if isinstance(csv_path, str) and csv_path:
+                csv_file = Path(csv_path)
+                if not csv_file.exists():
+                    raise FileNotFoundError(f"Session CSV not found: {csv_file}")
+                self._load_csv(csv_file)
+
+            target_column = payload.get("target_column")
+            if isinstance(target_column, str) and self.current_df is not None:
+                idx = self.target_combo.findText(target_column)
+                if idx >= 0:
+                    self.target_combo.setCurrentIndex(idx)
+
+            self.current_session_path = session_path
+            QMessageBox.information(self, "Session Loaded", f"Loaded session from:\n{session_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Session Load Error", str(exc))
 
 
 def main() -> None:

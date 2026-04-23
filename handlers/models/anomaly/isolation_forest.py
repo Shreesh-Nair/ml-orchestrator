@@ -38,7 +38,7 @@ class IsolationForestHandler(BaseHandler):
             raise ValueError("IsolationForestHandler: missing X_train/X_test/y_test in context")
 
         contamination = float(self.stage.params.get("contamination", 0.01))
-        random_state = int(self.stage.params.get("random_state", 42))
+        random_state = int(self.stage.params.get("random_state", context.get("_random_seed", 42)))
 
         model = IsolationForest(
             contamination=contamination,

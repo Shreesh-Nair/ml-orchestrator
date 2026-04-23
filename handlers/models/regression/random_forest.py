@@ -18,18 +18,21 @@ class RandomForestRegressionHandler(BaseHandler):
         # --- Hyperparameters ---
         n_estimators: int = 100
         max_depth: Optional[int] = None
+        random_state: int = int(context.get("_random_seed", 42))
         
         params = self.stage.params
         if "n_estimators" in params:
             n_estimators = int(params["n_estimators"])
         if "max_depth" in params and params["max_depth"] is not None:
             max_depth = int(params["max_depth"])
+        if "random_state" in params:
+            random_state = int(params["random_state"])
 
         # --- Training ---
         model = RandomForestRegressor(
             n_estimators=n_estimators, 
             max_depth=max_depth, 
-            random_state=42, 
+            random_state=random_state, 
             n_jobs=-1
         )
         model.fit(X_train, y_train)

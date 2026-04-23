@@ -35,7 +35,22 @@ class CSVLoaderHandler(BaseHandler):
         if not path.exists():
             raise FileNotFoundError(f"CSV file not found: {path}")
 
-        df = pd.read_csv(path)
+        try:
+            df = pd.read_csv(path)
+        except Exception as exc:
+            raise ValueError(f"CSVLoaderHandler: unable to read CSV '{path}': {exc}") from exc
+
+        if df.empty:
+            raise ValueError("CSVLoaderHandler: CSV has no rows")
+        if df.columns.duplicated().any():
+            duplicate_cols = df.columns[df.columns.duplicated()].tolist()
+            raise ValueError(f"CSVLoaderHandler: duplicate column names found: {duplicate_cols}")
+        if target_column not in df.columns:
+            raise ValueError(
+                f"CSVLoaderHandler: target column '{target_column}' is missing. "
+                f"Available columns: {list(df.columns)}"
+            )
+
         context["df"] = df
         context["target_column"] = target_column
 

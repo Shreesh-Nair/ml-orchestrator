@@ -26,7 +26,7 @@ class RandomForestTrainHandler(BaseHandler):
         # Hyperparameters
         n_estimators: int = 100
         max_depth: Optional[int] = None
-        random_state = 42
+        random_state = int(context.get("_random_seed", 42))
 
         if self.stage.models:
             cfg = self.stage.models[0]
@@ -35,6 +35,8 @@ class RandomForestTrainHandler(BaseHandler):
                 max_depth = int(cfg["max_depth"])
         else:
             params = self.stage.params
+            if "random_state" in params:
+                random_state = int(params["random_state"])
             if "n_estimators" in params:
                 n_estimators = int(params["n_estimators"])
             if "max_depth" in params and params["max_depth"] is not None:

@@ -221,9 +221,71 @@ This section is the full feature/change checklist from the current demo to a ten
 
 ### Phase 0 - Product Guardrails
 
-1. Define core user personas and top use cases.
-2. Freeze UX rules (wizard-first, safe defaults, advanced options hidden by default).
-3. Define quality bars for reliability, save/load integrity, and packaging stability.
+Phase 0 is now locked to prevent feature bloat and keep implementation decisions consistent.
+
+#### 0.1 Primary Users (Locked)
+
+1. Analyst
+	- Goal: run fast tabular experiments and export predictions for reporting.
+	- Constraint: wants speed and reproducibility, does not want to code.
+2. Operations User
+	- Goal: run repeatable prediction jobs on new files with minimal setup.
+	- Constraint: needs stable outputs and clear failure messages.
+3. Student / Learner
+	- Goal: understand ML flow through templates and visual feedback.
+	- Constraint: easily overwhelmed by excessive options.
+4. Small Business Owner
+	- Goal: get practical predictions for business decisions without hiring an ML team.
+	- Constraint: limited time, expects one-click defaults that work.
+
+#### 0.2 Top 5 Use Cases (Locked)
+
+1. Binary classification from CSV with model save and reload.
+2. Regression prediction from CSV with exported result file.
+3. Anomaly detection from CSV with scored output file.
+4. Manual single-record prediction form for quick what-if checks.
+5. Batch prediction on a user-provided CSV, exporting a new CSV with predictions and confidence/scores.
+
+All roadmap items should map to at least one of these 5 use cases or be deferred.
+
+#### 0.3 UX Principles (Frozen)
+
+1. Wizard-first
+	- Every workflow follows a guided sequence with visible progress.
+2. Safe defaults
+	- The default path should produce usable results without advanced tuning.
+3. Plain-language labels
+	- Prefer user language ("Target column") over technical jargon.
+4. Progressive disclosure
+	- Advanced controls are hidden by default and shown only when requested.
+5. Consistent interaction model
+	- Same flow pattern across classification, regression, anomaly, and future vision tasks.
+6. Actionable errors
+	- Every error should include what failed and what the user should do next.
+
+#### 0.4 Quality Bars (Minimum Acceptance Standards)
+
+1. Training success rate
+	- On bundled templates and known-good datasets, successful end-to-end runs must be >= 95% across test executions.
+2. Error clarity
+	- For common failures (missing columns, wrong target type, unreadable file, invalid model file), user-facing errors must explain cause and next step in one message.
+3. Save/load reliability
+	- Model save and reload must preserve schema compatibility and allow successful prediction on valid inputs in >= 99% of automated compatibility tests.
+4. Packaging stability
+	- Installer and one-folder build must launch on a clean Windows machine with no Python preinstalled.
+5. Output integrity
+	- Exported prediction files must retain input row order and append predictions/confidence without silent row drops.
+6. Responsiveness baseline
+	- UI must remain responsive during training/inference via background execution for supported workflows.
+
+#### 0.5 Scope Filter (Decision Rule)
+
+A new feature is accepted only if it satisfies all checks below:
+
+1. Helps at least one locked persona complete one locked use case.
+2. Fits wizard-first UX without forcing advanced complexity into the default path.
+3. Does not reduce Phase 0 quality bars.
+4. Can be tested with deterministic acceptance criteria.
 
 ### Phase 1 - Core Reliability Foundation
 

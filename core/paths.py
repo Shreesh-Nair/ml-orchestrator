@@ -99,8 +99,26 @@ def get_runs_csv_path() -> Path:
     return get_logs_dir() / "runs.csv"
 
 
+def get_run_summaries_dir() -> Path:
+    path = get_logs_dir() / "run_summaries"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def get_generated_pipelines_dir() -> Path:
     path = get_user_data_dir() / "pipelines" / "generated"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_projects_dir() -> Path:
+    path = get_user_data_dir() / "projects"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_exports_dir() -> Path:
+    path = get_user_data_dir() / "exports"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
