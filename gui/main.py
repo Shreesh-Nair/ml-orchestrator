@@ -96,8 +96,9 @@ class MainWindow(QMainWindow):
         self.loaded_model_payload: Dict[str, Any] | None = None
         self.current_session_path: Path | None = None
 
-        self.prediction_inputs: Dict[str, QLineEdit] = {}
+        self.prediction_inputs: Dict[str, Any] = {}
         self.prediction_schema: List[Dict[str, str]] = []
+        self.prediction_allowed_values: Dict[str, List[str]] = {}
         self.run_worker: PipelineRunWorker | None = None
 
         central = QWidget()
@@ -278,6 +279,11 @@ class MainWindow(QMainWindow):
         self.btn_predict.setStyleSheet("font-weight: bold; padding: 10px; background-color: #e0f7fa; color: black;")
         self.btn_predict.clicked.connect(self.on_predict_clicked)
         right_layout.addWidget(self.btn_predict)
+
+        self.lbl_prediction_warning = QLabel("")
+        self.lbl_prediction_warning.setWordWrap(True)
+        self.lbl_prediction_warning.setStyleSheet("color: #c56a00; font-size: 12px;")
+        right_layout.addWidget(self.lbl_prediction_warning)
 
         self.lbl_prediction_result = QLabel("Result: -")
         self.lbl_prediction_result.setAlignment(Qt.AlignCenter)
@@ -583,10 +589,28 @@ class MainWindow(QMainWindow):
         class_labels = context.get("class_labels") or list(np.asarray(artifacts.get("classes", [])))
         feature_columns = context.get("feature_columns") or []
         feature_dtypes = context.get("feature_dtypes") or {}
+        feature_allowed_values: Dict[str, List[str]] = {}
 
         if not feature_columns and self.current_df is not None and self.target_column in self.current_df.columns:
             feature_columns = list(self.current_df.columns.drop(self.target_column))
             feature_dtypes = {col: str(self.current_df[col].dtype) for col in feature_columns}
+
+        if self.current_df is not None:
+            for feature in feature_columns:
+                if feature not in self.current_df.columns:
+                    continue
+                dtype_text = str(feature_dtypes.get(feature, "")).lower()
+                if not any(token in dtype_text for token in ["object", "category", "bool"]):
+                    continue
+
+                series = self.current_df[feature].dropna()
+                if series.empty:
+                    continue
+
+                # Limit to most frequent categories to keep the UI compact and useful.
+                values = series.astype(str).value_counts().index.tolist()[:25]
+                if values:
+                    feature_allowed_values[feature] = values
 
         default_name = f"binary_rf_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pkl"
         path_str, _ = QFileDialog.getSaveFileName(
@@ -605,6 +629,7 @@ class MainWindow(QMainWindow):
             "target": self.target_column,
             "feature_columns": feature_columns,
             "feature_dtypes": feature_dtypes,
+            "feature_allowed_values": feature_allowed_values,
             "class_labels": [str(label) if isinstance(label, Path) else label for label in class_labels],
             "positive_label": artifacts.get("positive_label"),
             "preprocess": {
@@ -650,7 +675,9 @@ class MainWindow(QMainWindow):
         self.btn_predict.setEnabled(False)
         self.loaded_model_payload = None
         self.prediction_schema = []
+        self.prediction_allowed_values = {}
         self.lbl_prediction_result.setText("Result: -")
+        self.lbl_prediction_warning.setText("")
 
         try:
             payload = joblib.load(model_path)
@@ -663,8 +690,14 @@ class MainWindow(QMainWindow):
 
             feature_columns = meta.get("feature_columns")
             feature_dtypes = meta.get("feature_dtypes", {})
+            raw_allowed_values = meta.get("feature_allowed_values", {})
             if not isinstance(feature_columns, list) or not feature_columns:
                 raise ValueError("Model file missing feature schema")
+
+            if isinstance(raw_allowed_values, dict):
+                self.prediction_allowed_values = {
+                    str(k): [str(v) for v in values] for k, values in raw_allowed_values.items() if isinstance(values, list)
+                }
 
             self.prediction_schema = [
                 {"name": feature, "dtype": str(feature_dtypes.get(feature, "object"))}
@@ -686,6 +719,7 @@ class MainWindow(QMainWindow):
 
             self.loaded_model_payload = payload
             self._generate_prediction_form(self.prediction_schema)
+            self._update_prediction_warnings()
             self.btn_predict.setEnabled(True)
         except Exception as exc:
             self.lbl_model_info.setText(f"Error loading model: {exc}")
@@ -700,10 +734,59 @@ class MainWindow(QMainWindow):
         for item in schema:
             feature = item["name"]
             dtype = item["dtype"]
-            widget = QLineEdit()
-            widget.setPlaceholderText(f"Enter {feature}")
+            allowed_values = self.prediction_allowed_values.get(feature, [])
+
+            if allowed_values:
+                widget = QComboBox()
+                widget.setEditable(True)
+                widget.setInsertPolicy(QComboBox.NoInsert)
+                widget.addItems(allowed_values)
+                if widget.lineEdit() is not None:
+                    widget.lineEdit().setPlaceholderText(f"Select or type {feature}")
+                widget.currentTextChanged.connect(self._update_prediction_warnings)
+            else:
+                widget = QLineEdit()
+                widget.setPlaceholderText(f"Enter {feature}")
+                widget.textChanged.connect(self._update_prediction_warnings)
+
             self.predict_form_layout.addRow(f"{feature} ({dtype}):", widget)
             self.prediction_inputs[feature] = widget
+
+    def _widget_text(self, widget: Any) -> str:
+        if isinstance(widget, QComboBox):
+            return widget.currentText()
+        if isinstance(widget, QLineEdit):
+            return widget.text()
+        return ""
+
+    def _update_prediction_warnings(self) -> None:
+        warnings: List[str] = []
+
+        for item in self.prediction_schema:
+            feature = item["name"]
+            widget = self.prediction_inputs.get(feature)
+            if widget is None:
+                continue
+
+            allowed_values = self.prediction_allowed_values.get(feature, [])
+            if not allowed_values:
+                continue
+
+            raw_value = self._widget_text(widget).strip()
+            if not raw_value:
+                continue
+
+            allowed_norm = {v.strip().lower() for v in allowed_values}
+            if raw_value.lower() not in allowed_norm:
+                warnings.append(
+                    f"{feature}: '{raw_value}' was not seen in training data. "
+                    "Prediction may be less reliable."
+                )
+
+        if warnings:
+            self.lbl_prediction_warning.setText("Input warning: " + " | ".join(warnings[:3]))
+        else:
+            self.lbl_prediction_warning.setText("")
 
     def _coerce_input_value(self, feature: str, raw_value: str, dtype: str) -> Any:
         value = raw_value.strip()
@@ -750,7 +833,7 @@ class MainWindow(QMainWindow):
                 feature = item["name"]
                 dtype = item["dtype"]
                 widget = self.prediction_inputs[feature]
-                row[feature] = self._coerce_input_value(feature, widget.text(), dtype)
+                row[feature] = self._coerce_input_value(feature, self._widget_text(widget), dtype)
 
             input_df = pd.DataFrame([row])
             X = preprocessor.transform(input_df) if preprocessor is not None else input_df
