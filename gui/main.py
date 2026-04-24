@@ -330,8 +330,12 @@ class MainWindow(QMainWindow):
         self.btn_batch_predict = QPushButton("Batch Predict + Export")
         self.btn_batch_predict.setEnabled(False)
         self.btn_batch_predict.clicked.connect(self.on_batch_predict_clicked)
+        self.batch_output_profile_combo = QComboBox()
+        self.batch_output_profile_combo.addItem("Detailed Output", "detailed")
+        self.batch_output_profile_combo.addItem("Simple Output", "simple")
         batch_row.addWidget(self.btn_load_batch)
         batch_row.addWidget(self.btn_batch_predict)
+        batch_row.addWidget(self.batch_output_profile_combo)
         right_layout.addLayout(batch_row)
 
         self.lbl_batch_status = QLabel("Batch input: not loaded")
@@ -1096,7 +1100,12 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            output_df = predict_dataframe(self.loaded_model_payload, self.batch_input_df)
+            output_profile = str(self.batch_output_profile_combo.currentData() or "detailed")
+            output_df = predict_dataframe(
+                self.loaded_model_payload,
+                self.batch_input_df,
+                output_profile=output_profile,
+            )
 
             default_input = self.batch_input_path.stem if self.batch_input_path else "batch"
             default_name = f"{default_input}_predictions_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -1112,7 +1121,7 @@ class MainWindow(QMainWindow):
             out_path = Path(out_path_str)
             output_df.to_csv(out_path, index=False)
             self.lbl_batch_status.setText(
-                f"Batch output: {out_path.name} ({output_df.shape[0]} rows)"
+                f"Batch output: {out_path.name} ({output_df.shape[0]} rows, profile={output_profile})"
             )
             QMessageBox.information(self, "Batch Prediction Complete", f"Saved predictions to:\n{out_path}")
         except Exception as exc:

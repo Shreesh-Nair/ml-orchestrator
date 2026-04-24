@@ -82,6 +82,21 @@ def test_predict_dataframe_classification_outputs_scores(tmp_path: Path) -> None
     assert out.shape[0] == 2
 
 
+def test_predict_dataframe_classification_simple_profile_reduces_columns(tmp_path: Path) -> None:
+    payload = _run_classification_payload(tmp_path)
+
+    batch_df = pd.DataFrame(
+        {
+            "age": [25, 50],
+            "city": ["A", "C"],
+            "income": [40, 79],
+        }
+    )
+
+    out = predict_dataframe(payload, batch_df, output_profile="simple")
+    assert list(out.columns) == ["prediction", "prediction_score"]
+
+
 def test_predict_dataframe_missing_required_column_raises(tmp_path: Path) -> None:
     payload = _run_classification_payload(tmp_path)
 
@@ -119,6 +134,9 @@ def test_predict_dataframe_regression_outputs_numeric_prediction() -> None:
     assert out["prediction"].dtype.kind in {"f", "i"}
     assert len(out) == 3
 
+    out_simple = predict_dataframe(payload, batch_df, output_profile="simple")
+    assert list(out_simple.columns) == ["prediction"]
+
 
 def test_predict_dataframe_anomaly_outputs_label_and_score() -> None:
     context = run_pipeline("examples/fraud_anomaly.yml")
@@ -142,3 +160,6 @@ def test_predict_dataframe_anomaly_outputs_label_and_score() -> None:
     assert "prediction" in out.columns
     assert "anomaly_score" in out.columns
     assert set(out["prediction"].unique()).issubset({"Normal", "Anomaly"})
+
+    out_simple = predict_dataframe(payload, batch_df, output_profile="simple")
+    assert list(out_simple.columns) == ["prediction", "anomaly_score"]

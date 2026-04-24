@@ -49,7 +49,29 @@ def _coerce_series(feature: str, series: pd.Series, dtype: str) -> pd.Series:
     return series
 
 
-def predict_dataframe(payload: Dict[str, Any], input_df: pd.DataFrame) -> pd.DataFrame:
+def _normalize_output_profile(output_profile: str | None) -> str:
+    profile = (output_profile or "detailed").strip().lower()
+    if profile not in {"simple", "detailed"}:
+        return "detailed"
+    return profile
+
+
+def _apply_output_profile(df: pd.DataFrame, task: str, output_profile: str) -> pd.DataFrame:
+    if output_profile != "simple":
+        return df
+
+    keep = [col for col in df.columns if col == "prediction"]
+    if task == "classification" and "prediction_score" in df.columns:
+        keep.append("prediction_score")
+    if task == "anomaly" and "anomaly_score" in df.columns:
+        keep.append("anomaly_score")
+
+    if not keep:
+        keep = ["prediction"]
+    return df.loc[:, keep]
+
+
+def predict_dataframe(payload: Dict[str, Any], input_df: pd.DataFrame, *, output_profile: str = "detailed") -> pd.DataFrame:
     if not isinstance(payload, dict) or "meta" not in payload or "objects" not in payload:
         raise ValueError("Invalid model payload format")
 
@@ -76,20 +98,21 @@ def predict_dataframe(payload: Dict[str, Any], input_df: pd.DataFrame) -> pd.Dat
 
     X = preprocessor.transform(ordered) if preprocessor is not None else ordered
     task = _normalize_task(str(meta.get("task", "classification")))
+    profile = _normalize_output_profile(output_profile)
 
     out = input_df.copy()
 
     if task == "regression":
         pred = model.predict(X)
         out["prediction"] = np.asarray(pred, dtype=float)
-        return out
+        return _apply_output_profile(out, task, profile)
 
     if task == "anomaly":
         pred = model.predict(X)
         out["prediction"] = np.where(np.asarray(pred) == -1, "Anomaly", "Normal")
         if hasattr(model, "decision_function"):
             out["anomaly_score"] = -np.asarray(model.decision_function(X), dtype=float)
-        return out
+        return _apply_output_profile(out, task, profile)
 
     pred = model.predict(X)
     out["prediction"] = pred
@@ -106,4 +129,4 @@ def predict_dataframe(payload: Dict[str, Any], input_df: pd.DataFrame) -> pd.Dat
                 pos_idx = classes.index(positive_label)
                 out["prediction_score"] = probs[:, pos_idx]
 
-    return out
+    return _apply_output_profile(out, task, profile)
