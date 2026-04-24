@@ -330,9 +330,14 @@ class MainWindow(QMainWindow):
         self.btn_batch_predict = QPushButton("Batch Predict + Export")
         self.btn_batch_predict.setEnabled(False)
         self.btn_batch_predict.clicked.connect(self.on_batch_predict_clicked)
+        batch_row.addWidget(QLabel("Export profile:"))
         self.batch_output_profile_combo = QComboBox()
         self.batch_output_profile_combo.addItem("Detailed Output", "detailed")
         self.batch_output_profile_combo.addItem("Simple Output", "simple")
+        self.batch_output_profile_combo.setToolTip(
+            "Detailed includes original input columns and all prediction outputs.\n"
+            "Simple includes only essential prediction columns."
+        )
         batch_row.addWidget(self.btn_load_batch)
         batch_row.addWidget(self.btn_batch_predict)
         batch_row.addWidget(self.batch_output_profile_combo)
@@ -341,6 +346,11 @@ class MainWindow(QMainWindow):
         self.lbl_batch_status = QLabel("Batch input: not loaded")
         self.lbl_batch_status.setStyleSheet("font-size: 12px; color: #555;")
         right_layout.addWidget(self.lbl_batch_status)
+
+        self.lbl_batch_preview = QLabel("Export columns preview: -")
+        self.lbl_batch_preview.setWordWrap(True)
+        self.lbl_batch_preview.setStyleSheet("font-size: 12px; color: #555;")
+        right_layout.addWidget(self.lbl_batch_preview)
 
         self.lbl_prediction_warning = QLabel("")
         self.lbl_prediction_warning.setWordWrap(True)
@@ -870,6 +880,7 @@ class MainWindow(QMainWindow):
         self.lbl_prediction_result.setText("Result: -")
         self.lbl_prediction_warning.setText("")
         self.lbl_batch_status.setText("Batch input: not loaded")
+        self.lbl_batch_preview.setText("Export columns preview: -")
 
         try:
             payload = joblib.load(model_path)
@@ -1084,6 +1095,7 @@ class MainWindow(QMainWindow):
             self.lbl_batch_status.setText(
                 f"Batch input: {csv_path.name} ({df.shape[0]} rows, {df.shape[1]} cols)"
             )
+            self.lbl_batch_preview.setText("Export columns preview: ready after prediction")
             self.btn_batch_predict.setEnabled(self.loaded_model_payload is not None)
         except Exception as exc:
             self.batch_input_df = None
@@ -1106,6 +1118,12 @@ class MainWindow(QMainWindow):
                 self.batch_input_df,
                 output_profile=output_profile,
             )
+
+            preview_cols = output_df.columns.tolist()
+            preview_text = ", ".join(preview_cols[:8])
+            if len(preview_cols) > 8:
+                preview_text += f", ... (+{len(preview_cols) - 8} more)"
+            self.lbl_batch_preview.setText(f"Export columns preview: {preview_text}")
 
             default_input = self.batch_input_path.stem if self.batch_input_path else "batch"
             default_name = f"{default_input}_predictions_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"

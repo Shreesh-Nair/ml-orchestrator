@@ -63,6 +63,30 @@ Inside the app:
 3. Click `Save Model`.
 4. Go to `Model Library & Predict` and run predictions.
 
+## Batch Predict + Export
+
+You can run file-based prediction workflows for classification, regression, and anomaly models.
+
+1. Train and save a model from the `Train` tab.
+2. Open `Model Library & Predict` and select the saved model.
+3. Click `Load Batch CSV` and choose an input file containing the required feature columns.
+4. Choose export profile:
+	- `Detailed Output`: keeps input columns and adds prediction outputs.
+	- `Simple Output`: exports only essential prediction columns.
+5. Click `Batch Predict + Export` and save the output CSV.
+
+Output behavior by task:
+
+1. Classification:
+	- Detailed: input columns + `prediction` + probability columns.
+	- Simple: `prediction` + `prediction_score`.
+2. Regression:
+	- Detailed: input columns + `prediction`.
+	- Simple: `prediction`.
+3. Anomaly:
+	- Detailed: input columns + `prediction` + `anomaly_score`.
+	- Simple: `prediction` + `anomaly_score`.
+
 ## Testing Status
 
 Current automated tests cover:
