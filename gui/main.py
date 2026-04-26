@@ -44,6 +44,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.executor import run_pipeline
+from core.data_quality import analyze_data_quality
 from core.prediction import predict_dataframe
 from core.paths import (
     get_data_dir,
@@ -132,6 +133,7 @@ class MainWindow(QMainWindow):
         self.batch_input_df: pd.DataFrame | None = None
         self.batch_input_path: Path | None = None
         self.run_worker: PipelineRunWorker | None = None
+        self.data_quality_report: Dict[str, Any] | None = None
 
         self.selected_task: str = "classification"
         self.selected_model_type: str = "classification_rf"
@@ -206,6 +208,20 @@ class MainWindow(QMainWindow):
         self.target_combo.currentIndexChanged.connect(self.on_target_changed)
         target_row.addWidget(self.target_combo)
         top_layout.addLayout(target_row)
+
+        quality_group = QGroupBox("Data Quality")
+        quality_layout = QVBoxLayout()
+        self.lbl_data_quality_summary = QLabel("Load a dataset to see quality summary.")
+        self.lbl_data_quality_summary.setWordWrap(True)
+        self.lbl_data_quality_summary.setStyleSheet("font-size: 12px; color: #333;")
+        quality_layout.addWidget(self.lbl_data_quality_summary)
+
+        self.lbl_data_quality_warnings = QLabel("")
+        self.lbl_data_quality_warnings.setWordWrap(True)
+        self.lbl_data_quality_warnings.setStyleSheet("font-size: 12px; color: #a65f00;")
+        quality_layout.addWidget(self.lbl_data_quality_warnings)
+        quality_group.setLayout(quality_layout)
+        top_layout.addWidget(quality_group)
 
         prep_group = QGroupBox("Preprocessing")
         prep_layout = QVBoxLayout()
@@ -413,6 +429,8 @@ class MainWindow(QMainWindow):
             self.target_combo.setEnabled(True)
             if self.target_combo.count() > 0:
                 self.target_combo.setCurrentIndex(0)
+            else:
+                self._update_data_quality_labels(None)
 
             self.btn_save_model.setEnabled(False)
             self.last_run_context = None
@@ -425,6 +443,47 @@ class MainWindow(QMainWindow):
     def on_target_changed(self, index: int) -> None:
         if index >= 0:
             self.target_column = self.target_combo.itemText(index)
+        self._refresh_data_quality()
+
+    def _refresh_data_quality(self) -> None:
+        if self.current_df is None:
+            self.data_quality_report = None
+            self._update_data_quality_labels(None)
+            return
+
+        try:
+            self.data_quality_report = analyze_data_quality(self.current_df, self.target_column)
+            self._update_data_quality_labels(self.data_quality_report)
+        except Exception as exc:
+            self.data_quality_report = None
+            self.lbl_data_quality_summary.setText("Unable to compute quality summary.")
+            self.lbl_data_quality_warnings.setText(str(exc))
+
+    def _update_data_quality_labels(self, report: Dict[str, Any] | None) -> None:
+        if not report:
+            self.lbl_data_quality_summary.setText("Load a dataset to see quality summary.")
+            self.lbl_data_quality_warnings.setText("")
+            return
+
+        summary = report.get("summary") or {}
+        missing_columns = summary.get("missing_columns") or {}
+        potential_id_columns = summary.get("potential_id_columns") or []
+
+        self.lbl_data_quality_summary.setText(
+            f"Rows: {summary.get('rows', 0)} | Columns: {summary.get('columns', 0)} | "
+            f"Columns with missing values: {len(missing_columns)} | "
+            f"Potential ID columns: {len(potential_id_columns)}"
+        )
+
+        warnings = report.get("warnings") or []
+        if warnings:
+            preview = " | ".join(str(item) for item in warnings[:3])
+            extra = len(warnings) - 3
+            if extra > 0:
+                preview += f" | ... (+{extra} more)"
+            self.lbl_data_quality_warnings.setText(f"Warnings: {preview}")
+        else:
+            self.lbl_data_quality_warnings.setText("No major quality warnings detected.")
 
     def on_task_changed(self, index: int) -> None:
         task = self.task_combo.itemData(index)
