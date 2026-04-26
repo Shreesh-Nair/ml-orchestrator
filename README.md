@@ -63,6 +63,24 @@ Inside the app:
 3. Click `Save Model`.
 4. Go to `Model Library & Predict` and run predictions.
 
+## Data Quality Report
+
+The `Train` tab now includes a built-in data quality panel.
+
+1. Load any CSV dataset.
+2. Select a target column.
+3. Review summary and warnings for:
+	- Missing values
+	- Duplicate rows
+	- Constant columns
+	- High-cardinality columns
+	- Potential ID-like columns
+	- Target imbalance
+	- Outlier-heavy numeric columns
+4. Click `Export Quality Report` to save a JSON report.
+
+By default, the save dialog points to your local exports directory under `%LOCALAPPDATA%\ML Orchestrator\exports`.
+
 ## Batch Predict + Export
 
 You can run file-based prediction workflows for classification, regression, and anomaly models.

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import datetime
+import json
+from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -122,3 +125,43 @@ def analyze_data_quality(df: pd.DataFrame, target_column: str | None = None) -> 
         "summary": summary,
         "warnings": warnings,
     }
+
+
+def build_data_quality_report_payload(
+    report: Dict[str, Any],
+    *,
+    source_csv: str | None = None,
+    target_column: str | None = None,
+) -> Dict[str, Any]:
+    if not isinstance(report, dict):
+        raise ValueError("report must be a dictionary")
+
+    summary = report.get("summary")
+    warnings = report.get("warnings")
+    if not isinstance(summary, dict) or not isinstance(warnings, list):
+        raise ValueError("report must include 'summary' (dict) and 'warnings' (list)")
+
+    return {
+        "generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "source_csv": source_csv,
+        "target_column": target_column,
+        "summary": summary,
+        "warnings": warnings,
+    }
+
+
+def write_data_quality_report(
+    report: Dict[str, Any],
+    output_path: Path,
+    *,
+    source_csv: str | None = None,
+    target_column: str | None = None,
+) -> Path:
+    payload = build_data_quality_report_payload(
+        report,
+        source_csv=source_csv,
+        target_column=target_column,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return output_path

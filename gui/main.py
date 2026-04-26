@@ -44,7 +44,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.executor import run_pipeline
-from core.data_quality import analyze_data_quality
+from core.data_quality import analyze_data_quality, write_data_quality_report
 from core.prediction import predict_dataframe
 from core.paths import (
     get_data_dir,
@@ -220,6 +220,11 @@ class MainWindow(QMainWindow):
         self.lbl_data_quality_warnings.setWordWrap(True)
         self.lbl_data_quality_warnings.setStyleSheet("font-size: 12px; color: #a65f00;")
         quality_layout.addWidget(self.lbl_data_quality_warnings)
+
+        self.btn_export_quality_report = QPushButton("Export Quality Report")
+        self.btn_export_quality_report.setEnabled(False)
+        self.btn_export_quality_report.clicked.connect(self.on_export_quality_report_clicked)
+        quality_layout.addWidget(self.btn_export_quality_report)
         quality_group.setLayout(quality_layout)
         top_layout.addWidget(quality_group)
 
@@ -463,6 +468,7 @@ class MainWindow(QMainWindow):
         if not report:
             self.lbl_data_quality_summary.setText("Load a dataset to see quality summary.")
             self.lbl_data_quality_warnings.setText("")
+            self.btn_export_quality_report.setEnabled(False)
             return
 
         summary = report.get("summary") or {}
@@ -484,6 +490,41 @@ class MainWindow(QMainWindow):
             self.lbl_data_quality_warnings.setText(f"Warnings: {preview}")
         else:
             self.lbl_data_quality_warnings.setText("No major quality warnings detected.")
+
+        self.btn_export_quality_report.setEnabled(True)
+
+    def on_export_quality_report_clicked(self) -> None:
+        if not self.data_quality_report:
+            QMessageBox.warning(
+                self,
+                "Export Quality Report",
+                "Load a dataset to generate a data quality report first.",
+            )
+            return
+
+        csv_name = self.csv_path.stem if self.csv_path else "dataset"
+        default_name = f"{csv_name}_quality_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+        path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Data Quality Report",
+            str(EXPORTS_DIR / default_name),
+            "JSON Files (*.json)",
+        )
+        if not path_str:
+            return
+
+        out_path = Path(path_str)
+        try:
+            write_data_quality_report(
+                self.data_quality_report,
+                out_path,
+                source_csv=str(self.csv_path) if self.csv_path else None,
+                target_column=self.target_column,
+            )
+            QMessageBox.information(self, "Export Complete", f"Saved quality report to:\n{out_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
 
     def on_task_changed(self, index: int) -> None:
         task = self.task_combo.itemData(index)
