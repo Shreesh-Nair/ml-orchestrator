@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
 
         self.csv_path: Path | None = None
         self.training_csv_path: Path | None = None
+        self.original_df: pd.DataFrame | None = None
         self.target_column: str | None = None
         self.current_df: pd.DataFrame | None = None
 
@@ -252,6 +253,11 @@ class MainWindow(QMainWindow):
         self.btn_preview_quality_fixes.clicked.connect(self.on_preview_quality_fixes_clicked)
         quick_fix_action_row.addWidget(self.btn_preview_quality_fixes)
         quick_fix_action_row.addWidget(self.btn_apply_quality_fixes)
+
+        self.btn_revert_quality_fixes = QPushButton("Revert Quick Fixes")
+        self.btn_revert_quality_fixes.setEnabled(False)
+        self.btn_revert_quality_fixes.clicked.connect(self.on_revert_quality_fixes_clicked)
+        quick_fix_action_row.addWidget(self.btn_revert_quality_fixes)
         quality_layout.addLayout(quick_fix_action_row)
         quality_group.setLayout(quality_layout)
         top_layout.addWidget(quality_group)
@@ -455,7 +461,9 @@ class MainWindow(QMainWindow):
                 raise ValueError("CSV has no rows")
 
             self.current_df = df
+            self.original_df = df.copy(deep=True)
             self.file_label.setText(f"{self.csv_path.name} ({df.shape[0]} rows, {df.shape[1]} cols)")
+            self.btn_revert_quality_fixes.setEnabled(False)
 
             self.target_combo.clear()
             for col in df.columns:
@@ -550,6 +558,7 @@ class MainWindow(QMainWindow):
 
             action_text = "\n".join(actions) if actions else "Applied selected quick fixes."
             self.lbl_training_status.setText("Quick fixes applied; training will use cleaned dataset.")
+            self.btn_revert_quality_fixes.setEnabled(True)
             QMessageBox.information(self, "Quick Fixes Applied", action_text)
         except Exception as exc:
             QMessageBox.critical(self, "Quick Fixes Error", str(exc))
@@ -589,6 +598,44 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Quick Fix Preview", preview_text)
         except Exception as exc:
             QMessageBox.critical(self, "Quick Fix Preview Error", str(exc))
+
+    def on_revert_quality_fixes_clicked(self) -> None:
+        if self.csv_path is None or self.original_df is None:
+            QMessageBox.warning(self, "Revert Quick Fixes", "No original dataset is available to restore.")
+            return
+
+        if self.current_df is not None and self.current_df.equals(self.original_df):
+            QMessageBox.information(self, "Revert Quick Fixes", "Dataset is already in original state.")
+            self.btn_revert_quality_fixes.setEnabled(False)
+            return
+
+        self.current_df = self.original_df.copy(deep=True)
+        self.training_csv_path = self.csv_path
+
+        self.file_label.setText(
+            f"{self.csv_path.name} ({self.current_df.shape[0]} rows, {self.current_df.shape[1]} cols)"
+        )
+
+        previous_target = self.target_column
+        self.target_combo.blockSignals(True)
+        self.target_combo.clear()
+        for col in self.current_df.columns:
+            self.target_combo.addItem(col)
+        self.target_combo.blockSignals(False)
+
+        if previous_target and previous_target in self.current_df.columns:
+            idx = self.target_combo.findText(previous_target)
+            if idx >= 0:
+                self.target_combo.setCurrentIndex(idx)
+            self.target_column = previous_target
+        elif self.target_combo.count() > 0:
+            self.target_combo.setCurrentIndex(0)
+            self.target_column = self.target_combo.currentText()
+
+        self._refresh_data_quality()
+        self.lbl_training_status.setText("Reverted to original dataset; training will use original CSV.")
+        self.btn_revert_quality_fixes.setEnabled(False)
+        QMessageBox.information(self, "Revert Quick Fixes", "Restored original dataset state.")
 
     def _update_data_quality_labels(self, report: Dict[str, Any] | None) -> None:
         if not report:

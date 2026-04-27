@@ -83,6 +83,7 @@ The `Train` tab now includes a built-in data quality panel.
 	- Handle missing values with `None`, `Drop rows`, or `Fill simple (median/mode)`
 	- Use `Preview Quick Fixes` to inspect impact without changing data
 	- Use `Apply Quick Fixes` and confirm to execute changes
+	- Use `Revert Quick Fixes` to return to the original loaded dataset
 5. Click `Export Quality Report` to save a JSON report.
 
 By default, the save dialog points to your local exports directory under `%LOCALAPPDATA%\ML Orchestrator\exports`.
