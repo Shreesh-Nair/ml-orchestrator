@@ -174,6 +174,11 @@ class MainWindow(QMainWindow):
         file_row.addWidget(self.btn_run_demo)
         top_layout.addLayout(file_row)
 
+        self.lbl_training_source = QLabel("Training source: -")
+        self.lbl_training_source.setStyleSheet("font-size: 12px; color: #555;")
+        self.lbl_training_source.setWordWrap(True)
+        top_layout.addWidget(self.lbl_training_source)
+
         session_row = QHBoxLayout()
         self.btn_save_session = QPushButton("Save Session")
         self.btn_save_session.clicked.connect(self.on_save_session_clicked)
@@ -464,6 +469,7 @@ class MainWindow(QMainWindow):
             self.original_df = df.copy(deep=True)
             self.file_label.setText(f"{self.csv_path.name} ({df.shape[0]} rows, {df.shape[1]} cols)")
             self.btn_revert_quality_fixes.setEnabled(False)
+            self._update_training_source_label(is_cleaned=False)
 
             self.target_combo.clear()
             for col in df.columns:
@@ -533,6 +539,7 @@ class MainWindow(QMainWindow):
             cleaned_path.parent.mkdir(parents=True, exist_ok=True)
             self.current_df.to_csv(cleaned_path, index=False)
             self.training_csv_path = cleaned_path
+            self._update_training_source_label(is_cleaned=True)
 
             self.file_label.setText(
                 f"{cleaned_path.name} ({self.current_df.shape[0]} rows, {self.current_df.shape[1]} cols)"
@@ -611,6 +618,7 @@ class MainWindow(QMainWindow):
 
         self.current_df = self.original_df.copy(deep=True)
         self.training_csv_path = self.csv_path
+        self._update_training_source_label(is_cleaned=False)
 
         self.file_label.setText(
             f"{self.csv_path.name} ({self.current_df.shape[0]} rows, {self.current_df.shape[1]} cols)"
@@ -636,6 +644,16 @@ class MainWindow(QMainWindow):
         self.lbl_training_status.setText("Reverted to original dataset; training will use original CSV.")
         self.btn_revert_quality_fixes.setEnabled(False)
         QMessageBox.information(self, "Revert Quick Fixes", "Restored original dataset state.")
+
+    def _update_training_source_label(self, *, is_cleaned: bool) -> None:
+        if self.training_csv_path is None:
+            self.lbl_training_source.setText("Training source: -")
+            return
+
+        source_kind = "cleaned dataset" if is_cleaned else "original dataset"
+        self.lbl_training_source.setText(
+            f"Training source: {self.training_csv_path.name} ({source_kind})"
+        )
 
     def _update_data_quality_labels(self, report: Dict[str, Any] | None) -> None:
         if not report:
