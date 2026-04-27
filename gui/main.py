@@ -495,6 +495,7 @@ class MainWindow(QMainWindow):
 
         try:
             strategy = str(self.combo_missing_strategy.currentData() or "none")
+            before_rows, before_cols = self.current_df.shape
             fixed_df, actions = apply_quick_fixes(
                 self.current_df,
                 target_column=self.target_column,
@@ -502,6 +503,28 @@ class MainWindow(QMainWindow):
                 drop_duplicate_rows=self.chk_drop_duplicate_rows.isChecked(),
                 missing_strategy=strategy,
             )
+
+            after_rows, after_cols = fixed_df.shape
+            action_lines = actions if actions else ["No direct data changes detected from selected options."]
+            preview_text = (
+                "Quick-fix preview:\n"
+                f"Rows: {before_rows} -> {after_rows}\n"
+                f"Columns: {before_cols} -> {after_cols}\n\n"
+                "Planned actions:\n- "
+                + "\n- ".join(action_lines)
+                + "\n\nApply these changes?"
+            )
+
+            choice = QMessageBox.question(
+                self,
+                "Confirm Quick Fixes",
+                preview_text,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if choice != QMessageBox.Yes:
+                self.lbl_training_status.setText("Quick fixes cancelled by user.")
+                return
 
             if fixed_df.equals(self.current_df):
                 QMessageBox.information(self, "Quick Fixes", "No changes were needed.")
