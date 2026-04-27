@@ -500,3 +500,5 @@ Expected output:
 
 - The GUI runs training in a background worker thread to keep the app responsive.
 - Regression and anomaly handlers exist in code, but the GUI demo is intentionally binary-classification-only for now.
+
+- Shreesh
