@@ -5,6 +5,7 @@ import json
 import pandas as pd
 
 from core.data_quality import (
+    apply_quick_fixes,
     analyze_data_quality,
     build_data_quality_report_payload,
     write_data_quality_report,
@@ -121,3 +122,48 @@ def test_write_data_quality_report_creates_json_file(tmp_path) -> None:
     assert payload["target_column"] == "target"
     assert "summary" in payload
     assert "warnings" in payload
+
+
+def test_apply_quick_fixes_fill_simple_and_drop_constant() -> None:
+    df = pd.DataFrame(
+        {
+            "constant": [1, 1, 1, 1],
+            "num": [10.0, None, 30.0, 40.0],
+            "cat": ["a", None, "b", "b"],
+            "target": [1, 0, 1, None],
+        }
+    )
+
+    fixed_df, actions = apply_quick_fixes(
+        df,
+        target_column="target",
+        drop_constant_columns=True,
+        missing_strategy="fill_simple",
+    )
+
+    assert "constant" not in fixed_df.columns
+    assert fixed_df["target"].isna().sum() == 0
+    assert fixed_df["num"].isna().sum() == 0
+    assert fixed_df["cat"].isna().sum() == 0
+    assert any("Dropped constant columns" in action for action in actions)
+    assert any("Filled missing values" in action for action in actions)
+
+
+def test_apply_quick_fixes_drop_rows_strategy() -> None:
+    df = pd.DataFrame(
+        {
+            "feature": [1.0, None, 3.0, 4.0],
+            "target": [0, 1, None, 1],
+        }
+    )
+
+    fixed_df, actions = apply_quick_fixes(
+        df,
+        target_column="target",
+        drop_constant_columns=False,
+        missing_strategy="drop_rows",
+    )
+
+    assert len(fixed_df) == 2
+    assert fixed_df.isna().sum().sum() == 0
+    assert any("Dropped" in action for action in actions)

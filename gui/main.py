@@ -44,7 +44,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.executor import run_pipeline
-from core.data_quality import analyze_data_quality, write_data_quality_report
+from core.data_quality import analyze_data_quality, apply_quick_fixes, write_data_quality_report
 from core.prediction import predict_dataframe
 from core.paths import (
     get_data_dir,
@@ -120,6 +120,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("ML Orchestrator - Binary Classification Demo")
 
         self.csv_path: Path | None = None
+        self.training_csv_path: Path | None = None
         self.target_column: str | None = None
         self.current_df: pd.DataFrame | None = None
 
@@ -225,6 +226,24 @@ class MainWindow(QMainWindow):
         self.btn_export_quality_report.setEnabled(False)
         self.btn_export_quality_report.clicked.connect(self.on_export_quality_report_clicked)
         quality_layout.addWidget(self.btn_export_quality_report)
+
+        quick_fix_row = QHBoxLayout()
+        self.chk_drop_constant_columns = QCheckBox("Drop constant columns")
+        self.chk_drop_constant_columns.setChecked(True)
+        quick_fix_row.addWidget(self.chk_drop_constant_columns)
+
+        quick_fix_row.addWidget(QLabel("Missing values:"))
+        self.combo_missing_strategy = QComboBox()
+        self.combo_missing_strategy.addItem("None", "none")
+        self.combo_missing_strategy.addItem("Drop rows", "drop_rows")
+        self.combo_missing_strategy.addItem("Fill simple (median/mode)", "fill_simple")
+        quick_fix_row.addWidget(self.combo_missing_strategy)
+        quick_fix_row.addStretch()
+        quality_layout.addLayout(quick_fix_row)
+
+        self.btn_apply_quality_fixes = QPushButton("Apply Quick Fixes")
+        self.btn_apply_quality_fixes.clicked.connect(self.on_apply_quality_fixes_clicked)
+        quality_layout.addWidget(self.btn_apply_quality_fixes)
         quality_group.setLayout(quality_layout)
         top_layout.addWidget(quality_group)
 
@@ -420,6 +439,7 @@ class MainWindow(QMainWindow):
 
     def _load_csv(self, csv_path: Path) -> None:
         self.csv_path = csv_path
+        self.training_csv_path = csv_path
         try:
             df = pd.read_csv(self.csv_path)
             if df.empty:
@@ -463,6 +483,61 @@ class MainWindow(QMainWindow):
             self.data_quality_report = None
             self.lbl_data_quality_summary.setText("Unable to compute quality summary.")
             self.lbl_data_quality_warnings.setText(str(exc))
+
+    def on_apply_quality_fixes_clicked(self) -> None:
+        if self.current_df is None:
+            QMessageBox.warning(self, "Quick Fixes", "Please load a dataset first.")
+            return
+
+        try:
+            strategy = str(self.combo_missing_strategy.currentData() or "none")
+            fixed_df, actions = apply_quick_fixes(
+                self.current_df,
+                target_column=self.target_column,
+                drop_constant_columns=self.chk_drop_constant_columns.isChecked(),
+                missing_strategy=strategy,
+            )
+
+            if fixed_df.equals(self.current_df):
+                QMessageBox.information(self, "Quick Fixes", "No changes were needed.")
+                return
+
+            self.current_df = fixed_df
+
+            base_name = self.csv_path.stem if self.csv_path else "dataset"
+            cleaned_name = f"{base_name}_cleaned_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            cleaned_path = GENERATED_DIR / cleaned_name
+            cleaned_path.parent.mkdir(parents=True, exist_ok=True)
+            self.current_df.to_csv(cleaned_path, index=False)
+            self.training_csv_path = cleaned_path
+
+            self.file_label.setText(
+                f"{cleaned_path.name} ({self.current_df.shape[0]} rows, {self.current_df.shape[1]} cols)"
+            )
+
+            previous_target = self.target_column
+            self.target_combo.blockSignals(True)
+            self.target_combo.clear()
+            for col in self.current_df.columns:
+                self.target_combo.addItem(col)
+            self.target_combo.blockSignals(False)
+
+            if previous_target and previous_target in self.current_df.columns:
+                idx = self.target_combo.findText(previous_target)
+                if idx >= 0:
+                    self.target_combo.setCurrentIndex(idx)
+                self.target_column = previous_target
+            elif self.target_combo.count() > 0:
+                self.target_combo.setCurrentIndex(0)
+                self.target_column = self.target_combo.currentText()
+
+            self._refresh_data_quality()
+
+            action_text = "\n".join(actions) if actions else "Applied selected quick fixes."
+            self.lbl_training_status.setText("Quick fixes applied; training will use cleaned dataset.")
+            QMessageBox.information(self, "Quick Fixes Applied", action_text)
+        except Exception as exc:
+            QMessageBox.critical(self, "Quick Fixes Error", str(exc))
 
     def _update_data_quality_labels(self, report: Dict[str, Any] | None) -> None:
         if not report:
@@ -836,7 +911,7 @@ class MainWindow(QMainWindow):
                     "name": "load_data",
                     "type": "csv_loader",
                     "params": {
-                        "source": str(self.csv_path),
+                        "source": str(self.training_csv_path or self.csv_path),
                         "target_column": self.target_column,
                     },
                 },

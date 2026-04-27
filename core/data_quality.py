@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 
@@ -165,3 +165,80 @@ def write_data_quality_report(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return output_path
+
+
+def apply_quick_fixes(
+    df: pd.DataFrame,
+    *,
+    target_column: str | None = None,
+    drop_constant_columns: bool = True,
+    missing_strategy: str = "none",
+) -> Tuple[pd.DataFrame, List[str]]:
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("apply_quick_fixes expects a pandas DataFrame")
+
+    fixed = df.copy(deep=True)
+    actions: List[str] = []
+
+    if drop_constant_columns:
+        constant_cols: List[str] = []
+        for col in fixed.columns:
+            if target_column and col == target_column:
+                continue
+            if fixed[col].nunique(dropna=False) <= 1:
+                constant_cols.append(col)
+
+        if constant_cols:
+            fixed = fixed.drop(columns=constant_cols)
+            actions.append(f"Dropped constant columns: {constant_cols}")
+
+    if target_column and target_column in fixed.columns:
+        missing_target_rows = int(fixed[target_column].isna().sum())
+        if missing_target_rows > 0:
+            fixed = fixed[fixed[target_column].notna()].copy()
+            actions.append(
+                f"Dropped {missing_target_rows} rows with missing target '{target_column}'."
+            )
+
+    strategy = (missing_strategy or "none").strip().lower()
+    valid_strategies = {"none", "drop_rows", "fill_simple"}
+    if strategy not in valid_strategies:
+        raise ValueError(
+            f"Invalid missing strategy '{missing_strategy}'. "
+            f"Expected one of: {sorted(valid_strategies)}"
+        )
+
+    if strategy == "drop_rows":
+        before = len(fixed)
+        fixed = fixed.dropna().copy()
+        dropped = before - len(fixed)
+        if dropped > 0:
+            actions.append(f"Dropped {dropped} rows containing missing values.")
+
+    if strategy == "fill_simple":
+        fill_counts: Dict[str, int] = {}
+        for col in fixed.columns:
+            if target_column and col == target_column:
+                continue
+
+            missing_count = int(fixed[col].isna().sum())
+            if missing_count <= 0:
+                continue
+
+            if pd.api.types.is_numeric_dtype(fixed[col]):
+                median_val = fixed[col].median()
+                if pd.isna(median_val):
+                    median_val = 0
+                fixed[col] = fixed[col].fillna(median_val)
+            else:
+                modes = fixed[col].mode(dropna=True)
+                fill_val = modes.iloc[0] if len(modes) > 0 else "missing"
+                fixed[col] = fixed[col].fillna(fill_val)
+
+            fill_counts[col] = missing_count
+
+        if fill_counts:
+            actions.append(f"Filled missing values in columns: {fill_counts}")
+
+    fixed = fixed.reset_index(drop=True)
+    return fixed, actions
