@@ -17,6 +17,11 @@ __pycache__/
 .coverage.*
 htmlcov/
 
+# Test reports
+.pytest_*.xml
+pytest-report.xml
+junit*.xml
+
 # Build artifacts
 build/
 dist/
