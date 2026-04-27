@@ -247,7 +247,12 @@ class MainWindow(QMainWindow):
 
         self.btn_apply_quality_fixes = QPushButton("Apply Quick Fixes")
         self.btn_apply_quality_fixes.clicked.connect(self.on_apply_quality_fixes_clicked)
-        quality_layout.addWidget(self.btn_apply_quality_fixes)
+        quick_fix_action_row = QHBoxLayout()
+        self.btn_preview_quality_fixes = QPushButton("Preview Quick Fixes")
+        self.btn_preview_quality_fixes.clicked.connect(self.on_preview_quality_fixes_clicked)
+        quick_fix_action_row.addWidget(self.btn_preview_quality_fixes)
+        quick_fix_action_row.addWidget(self.btn_apply_quality_fixes)
+        quality_layout.addLayout(quick_fix_action_row)
         quality_group.setLayout(quality_layout)
         top_layout.addWidget(quality_group)
 
@@ -494,31 +499,13 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            strategy = str(self.combo_missing_strategy.currentData() or "none")
-            before_rows, before_cols = self.current_df.shape
-            fixed_df, actions = apply_quick_fixes(
-                self.current_df,
-                target_column=self.target_column,
-                drop_constant_columns=self.chk_drop_constant_columns.isChecked(),
-                drop_duplicate_rows=self.chk_drop_duplicate_rows.isChecked(),
-                missing_strategy=strategy,
-            )
-
-            after_rows, after_cols = fixed_df.shape
-            action_lines = actions if actions else ["No direct data changes detected from selected options."]
-            preview_text = (
-                "Quick-fix preview:\n"
-                f"Rows: {before_rows} -> {after_rows}\n"
-                f"Columns: {before_cols} -> {after_cols}\n\n"
-                "Planned actions:\n- "
-                + "\n- ".join(action_lines)
-                + "\n\nApply these changes?"
-            )
+            fixed_df, preview_text, actions = self._build_quick_fix_preview()
+            confirm_text = f"{preview_text}\n\nApply these changes?"
 
             choice = QMessageBox.question(
                 self,
                 "Confirm Quick Fixes",
-                preview_text,
+                confirm_text,
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes,
             )
@@ -566,6 +553,42 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Quick Fixes Applied", action_text)
         except Exception as exc:
             QMessageBox.critical(self, "Quick Fixes Error", str(exc))
+
+    def _build_quick_fix_preview(self) -> tuple[pd.DataFrame, str, List[str]]:
+        if self.current_df is None:
+            raise ValueError("Please load a dataset first.")
+
+        strategy = str(self.combo_missing_strategy.currentData() or "none")
+        before_rows, before_cols = self.current_df.shape
+        fixed_df, actions = apply_quick_fixes(
+            self.current_df,
+            target_column=self.target_column,
+            drop_constant_columns=self.chk_drop_constant_columns.isChecked(),
+            drop_duplicate_rows=self.chk_drop_duplicate_rows.isChecked(),
+            missing_strategy=strategy,
+        )
+
+        after_rows, after_cols = fixed_df.shape
+        action_lines = actions if actions else ["No direct data changes detected from selected options."]
+        preview_text = (
+            "Quick-fix preview:\n"
+            f"Rows: {before_rows} -> {after_rows}\n"
+            f"Columns: {before_cols} -> {after_cols}\n\n"
+            "Planned actions:\n- "
+            + "\n- ".join(action_lines)
+        )
+        return fixed_df, preview_text, actions
+
+    def on_preview_quality_fixes_clicked(self) -> None:
+        if self.current_df is None:
+            QMessageBox.warning(self, "Quick Fix Preview", "Please load a dataset first.")
+            return
+
+        try:
+            _, preview_text, _ = self._build_quick_fix_preview()
+            QMessageBox.information(self, "Quick Fix Preview", preview_text)
+        except Exception as exc:
+            QMessageBox.critical(self, "Quick Fix Preview Error", str(exc))
 
     def _update_data_quality_labels(self, report: Dict[str, Any] | None) -> None:
         if not report:
