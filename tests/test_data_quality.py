@@ -167,3 +167,24 @@ def test_apply_quick_fixes_drop_rows_strategy() -> None:
     assert len(fixed_df) == 2
     assert fixed_df.isna().sum().sum() == 0
     assert any("Dropped" in action for action in actions)
+
+
+def test_apply_quick_fixes_drop_duplicate_rows() -> None:
+    df = pd.DataFrame(
+        {
+            "feature": [1, 1, 2, 2],
+            "other": ["a", "a", "b", "b"],
+            "target": [0, 0, 1, 1],
+        }
+    )
+
+    fixed_df, actions = apply_quick_fixes(
+        df,
+        target_column="target",
+        drop_constant_columns=False,
+        drop_duplicate_rows=True,
+        missing_strategy="none",
+    )
+
+    assert len(fixed_df) == 2
+    assert any("duplicate rows" in action.lower() for action in actions)

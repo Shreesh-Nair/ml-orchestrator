@@ -172,6 +172,7 @@ def apply_quick_fixes(
     *,
     target_column: str | None = None,
     drop_constant_columns: bool = True,
+    drop_duplicate_rows: bool = False,
     missing_strategy: str = "none",
 ) -> Tuple[pd.DataFrame, List[str]]:
     if not isinstance(df, pd.DataFrame):
@@ -179,6 +180,13 @@ def apply_quick_fixes(
 
     fixed = df.copy(deep=True)
     actions: List[str] = []
+
+    if drop_duplicate_rows:
+        before = len(fixed)
+        fixed = fixed.drop_duplicates().copy()
+        removed = before - len(fixed)
+        if removed > 0:
+            actions.append(f"Dropped {removed} duplicate rows.")
 
     if drop_constant_columns:
         constant_cols: List[str] = []

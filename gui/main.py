@@ -228,6 +228,10 @@ class MainWindow(QMainWindow):
         quality_layout.addWidget(self.btn_export_quality_report)
 
         quick_fix_row = QHBoxLayout()
+        self.chk_drop_duplicate_rows = QCheckBox("Drop duplicate rows")
+        self.chk_drop_duplicate_rows.setChecked(False)
+        quick_fix_row.addWidget(self.chk_drop_duplicate_rows)
+
         self.chk_drop_constant_columns = QCheckBox("Drop constant columns")
         self.chk_drop_constant_columns.setChecked(True)
         quick_fix_row.addWidget(self.chk_drop_constant_columns)
@@ -495,6 +499,7 @@ class MainWindow(QMainWindow):
                 self.current_df,
                 target_column=self.target_column,
                 drop_constant_columns=self.chk_drop_constant_columns.isChecked(),
+                drop_duplicate_rows=self.chk_drop_duplicate_rows.isChecked(),
                 missing_strategy=strategy,
             )
 
@@ -1332,6 +1337,11 @@ class MainWindow(QMainWindow):
                 "test_size": float(self.test_size_spin.value()),
                 "random_seed": int(self.random_seed_spin.value()),
             },
+            "data_quality_fixes": {
+                "drop_duplicate_rows": self.chk_drop_duplicate_rows.isChecked(),
+                "drop_constant_columns": self.chk_drop_constant_columns.isChecked(),
+                "missing_strategy": str(self.combo_missing_strategy.currentData() or "none"),
+            },
         }
 
     def on_save_session_clicked(self) -> None:
@@ -1374,6 +1384,13 @@ class MainWindow(QMainWindow):
             self.encode_checkbox.setChecked(bool(preprocess.get("encode_categoricals", True)))
             self.test_size_spin.setValue(float(preprocess.get("test_size", 0.2)))
             self.random_seed_spin.setValue(int(preprocess.get("random_seed", 42)))
+
+            data_quality_fixes = payload.get("data_quality_fixes") or {}
+            self.chk_drop_duplicate_rows.setChecked(bool(data_quality_fixes.get("drop_duplicate_rows", False)))
+            self.chk_drop_constant_columns.setChecked(bool(data_quality_fixes.get("drop_constant_columns", True)))
+            missing_strategy = str(data_quality_fixes.get("missing_strategy", "none"))
+            idx_strategy = self.combo_missing_strategy.findData(missing_strategy)
+            self.combo_missing_strategy.setCurrentIndex(idx_strategy if idx_strategy >= 0 else 0)
 
             csv_path = payload.get("csv_path")
             if isinstance(csv_path, str) and csv_path:

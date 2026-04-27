@@ -78,11 +78,13 @@ The `Train` tab now includes a built-in data quality panel.
 	- Target imbalance
 	- Outlier-heavy numeric columns
 4. (Optional) Apply `Quick Fixes`:
+	- Drop duplicate rows
 	- Drop constant columns
 	- Handle missing values with `None`, `Drop rows`, or `Fill simple (median/mode)`
 5. Click `Export Quality Report` to save a JSON report.
 
 By default, the save dialog points to your local exports directory under `%LOCALAPPDATA%\ML Orchestrator\exports`.
+Quick-fix selections are saved in session files and restored on load.
 
 ## Batch Predict + Export
 
