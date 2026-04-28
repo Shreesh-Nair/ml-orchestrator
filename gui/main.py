@@ -44,7 +44,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.executor import run_pipeline
-from core.data_quality import analyze_data_quality, apply_quick_fixes, write_data_quality_report
+from core.data_quality import analyze_data_quality, apply_quick_fixes, write_data_quality_report, recommend_quick_fixes
 from core.prediction import predict_dataframe
 from core.paths import (
     get_data_dir,
@@ -257,6 +257,10 @@ class MainWindow(QMainWindow):
         self.btn_preview_quality_fixes = QPushButton("Preview Quick Fixes")
         self.btn_preview_quality_fixes.clicked.connect(self.on_preview_quality_fixes_clicked)
         quick_fix_action_row.addWidget(self.btn_preview_quality_fixes)
+        # Button to apply recommended automatic quick-fixes
+        self.btn_apply_recommended = QPushButton("Apply Recommended Fixes")
+        self.btn_apply_recommended.clicked.connect(self.on_apply_recommended_clicked)
+        quick_fix_action_row.addWidget(self.btn_apply_recommended)
         quick_fix_action_row.addWidget(self.btn_apply_quality_fixes)
 
         self.btn_revert_quality_fixes = QPushButton("Revert Quick Fixes")
@@ -501,6 +505,11 @@ class MainWindow(QMainWindow):
 
         try:
             self.data_quality_report = analyze_data_quality(self.current_df, self.target_column)
+            # Also compute automated recommendations for quick-fixes
+            try:
+                self._auto_recommendations = recommend_quick_fixes(self.data_quality_report)
+            except Exception:
+                self._auto_recommendations = None
             self._update_data_quality_labels(self.data_quality_report)
         except Exception as exc:
             self.data_quality_report = None
@@ -716,6 +725,73 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Export Complete", f"Saved quality report to:\n{out_path}")
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
+
+    def on_apply_recommended_clicked(self) -> None:
+        """Apply recommended quick-fix settings automatically without extra prompts."""
+        if self.current_df is None or not self.data_quality_report:
+            QMessageBox.warning(self, "Recommended Fixes", "Please load a dataset first.")
+            return
+
+        try:
+            rec = recommend_quick_fixes(self.data_quality_report)
+            # Update UI controls to reflect recommendation
+            self.chk_drop_duplicate_rows.setChecked(bool(rec.get("drop_duplicate_rows", False)))
+            self.chk_drop_constant_columns.setChecked(bool(rec.get("drop_constant_columns", False)))
+            missing_strategy = rec.get("missing_strategy", "none")
+            idx = self.combo_missing_strategy.findData(missing_strategy)
+            if idx >= 0:
+                self.combo_missing_strategy.setCurrentIndex(idx)
+
+            # Apply fixes immediately
+            fixed_df, actions = apply_quick_fixes(
+                self.current_df,
+                target_column=self.target_column,
+                drop_constant_columns=self.chk_drop_constant_columns.isChecked(),
+                drop_duplicate_rows=self.chk_drop_duplicate_rows.isChecked(),
+                missing_strategy=str(missing_strategy),
+            )
+
+            if fixed_df.equals(self.current_df):
+                QMessageBox.information(self, "Recommended Fixes", "No changes were needed based on recommendations.")
+                return
+
+            # Persist cleaned CSV similar to manual apply
+            base_name = self.csv_path.stem if self.csv_path else "dataset"
+            cleaned_name = f"{base_name}_cleaned_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            cleaned_path = GENERATED_DIR / cleaned_name
+            cleaned_path.parent.mkdir(parents=True, exist_ok=True)
+            fixed_df.to_csv(cleaned_path, index=False)
+
+            self.current_df = fixed_df
+            self.training_csv_path = cleaned_path
+            self._update_training_source_label(is_cleaned=True)
+
+            self.file_label.setText(f"{cleaned_path.name} ({self.current_df.shape[0]} rows, {self.current_df.shape[1]} cols)")
+
+            previous_target = self.target_column
+            self.target_combo.blockSignals(True)
+            self.target_combo.clear()
+            for col in self.current_df.columns:
+                self.target_combo.addItem(col)
+            self.target_combo.blockSignals(False)
+
+            if previous_target and previous_target in self.current_df.columns:
+                idx = self.target_combo.findText(previous_target)
+                if idx >= 0:
+                    self.target_combo.setCurrentIndex(idx)
+                self.target_column = previous_target
+            elif self.target_combo.count() > 0:
+                self.target_combo.setCurrentIndex(0)
+                self.target_column = self.target_combo.currentText()
+
+            self._refresh_data_quality()
+
+            action_text = "\n".join(actions) if actions else "Applied recommended quick fixes."
+            self.lbl_training_status.setText("Recommended quick fixes applied; training will use cleaned dataset.")
+            self.btn_revert_quality_fixes.setEnabled(True)
+            QMessageBox.information(self, "Recommended Fixes Applied", action_text)
+        except Exception as exc:
+            QMessageBox.critical(self, "Recommended Fixes Error", str(exc))
 
     def on_task_changed(self, index: int) -> None:
         task = self.task_combo.itemData(index)

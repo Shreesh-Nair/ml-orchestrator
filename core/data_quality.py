@@ -250,3 +250,80 @@ def apply_quick_fixes(
 
     fixed = fixed.reset_index(drop=True)
     return fixed, actions
+
+
+def recommend_quick_fixes(report: Dict[str, Any]) -> Dict[str, Any]:
+    """Given a data quality report (from analyze_data_quality), return
+    recommended quick-fix settings and a short rationale.
+
+    Returns a dict with keys:
+      - drop_duplicate_rows: bool
+      - drop_constant_columns: bool
+      - missing_strategy: one of {'none','drop_rows','fill_simple'}
+      - rationale: List[str]
+    """
+    if not isinstance(report, dict):
+        raise ValueError("report must be a dict from analyze_data_quality")
+
+    summary = report.get("summary") or {}
+    if not isinstance(summary, dict):
+        raise ValueError("report['summary'] must be a dict")
+
+    rows = int(summary.get("rows", 0))
+    cols = int(summary.get("columns", 0))
+
+    recommendations = {
+        "drop_duplicate_rows": False,
+        "drop_constant_columns": False,
+        "missing_strategy": "none",
+        "rationale": [],
+    }
+
+    # Duplicates
+    dup = int(summary.get("duplicate_rows", 0))
+    if dup > 0:
+        recommendations["drop_duplicate_rows"] = True
+        recommendations["rationale"].append(f"Detected {dup} duplicate rows.")
+
+    # Constant columns
+    const_cols = summary.get("constant_columns") or []
+    if const_cols:
+        recommendations["drop_constant_columns"] = True
+        recommendations["rationale"].append(f"Constant columns: {const_cols}.")
+
+    # Missingness
+    missing = summary.get("missing_columns") or {}
+    # If target column missingness (key 'target' present in summary?), handled by caller
+    # Compute simple heuristics
+    if missing:
+        # If any column has very high missing ratio, prefer dropping rows (if target present maybe drop rows)
+        high_missing = [c for c, pct in missing.items() if pct >= 0.30]
+        total_missing_cells = 0.0
+        for pct in missing.values():
+            total_missing_cells += float(pct) * rows
+        overall_missing_ratio = 0.0
+        if rows > 0 and cols > 0:
+            overall_missing_ratio = total_missing_cells / (rows * cols)
+
+        if high_missing:
+            recommendations["missing_strategy"] = "drop_rows"
+            recommendations["rationale"].append(
+                f"Columns with >=30% missing: {high_missing}; recommend dropping rows or removing columns."
+            )
+        elif overall_missing_ratio <= 0.05:
+            recommendations["missing_strategy"] = "fill_simple"
+            recommendations["rationale"].append(
+                f"Overall missingness {overall_missing_ratio:.3f} is small; prefer simple fill."
+            )
+        else:
+            # moderate missingness --> fill_simple by default
+            recommendations["missing_strategy"] = "fill_simple"
+            recommendations["rationale"].append(
+                f"Overall missingness {overall_missing_ratio:.3f}; recommend filling simple."
+            )
+
+    # Ensure missing_strategy is valid
+    if recommendations["missing_strategy"] not in {"none", "drop_rows", "fill_simple"}:
+        recommendations["missing_strategy"] = "none"
+
+    return recommendations
