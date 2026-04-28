@@ -41,6 +41,11 @@ jobs:
           mkdir reports
           python -m pytest -q --junitxml=reports/junit.xml
 
+      - name: Run quick-fix recommender on examples
+        run: |
+          python scripts\apply_recommender_to_examples.py
+
+
       - name: Upload JUnit XML
         if: always()
         uses: actions/upload-artifact@v4
