@@ -1,0 +1,13 @@
+name: ml-orch-pack
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - "numpy<2"
+    - "pandas<2.2"
+    - "scikit-learn==1.5.2"
+    - pyinstaller
+    - "PySide6==6.6.*"
+    - -r requirements.txt
