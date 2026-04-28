@@ -20,6 +20,7 @@ if ($Clean) {
 }
 
 Write-Host "Building demo executable..." -ForegroundColor Cyan
+python scripts\check_packaging_env.py
 
 $poetryCommand = Get-Command poetry -ErrorAction SilentlyContinue
 if ($poetryCommand) {

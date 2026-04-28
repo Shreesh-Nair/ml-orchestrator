@@ -1,8 +1,12 @@
-# Custom hook to ensure PySide6 data files, binaries and hiddenimports are collected
-from PyInstaller.utils.hooks import collect_all
+"""Collect PySide6 runtime files without forcing a full package import.
 
-# collect_all returns (datas, binaries, hiddenimports)
-datas, binaries, hiddenimports = collect_all('PySide6')
+The standard PySide6 hooks handle the Qt submodules imported by the app.
+This hook only gathers package data and binaries so PyInstaller does not
+need to import optional PySide6 script helpers during analysis.
+"""
 
-# Expose to PyInstaller
-# 'datas' and 'binaries' will be added automatically; hiddenimports appended
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+
+datas = collect_data_files("PySide6")
+binaries = collect_dynamic_libs("PySide6")
+hiddenimports = []

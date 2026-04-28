@@ -26,15 +26,4 @@ jobs:
 
       - name: Check NumPy major version
         run: |
-          python - <<'PY'
-import numpy as np, sys, re
-v = np.__version__
-print('numpy', v)
-m = re.match(r'^(\d+)\.', v)
-major = int(m.group(1)) if m else 0
-if major >= 2:
-    print('ERROR: NumPy major version >= 2 detected; packaging should pin numpy<2 to avoid ABI mismatches')
-    sys.exit(1)
-else:
-    print('NumPy major version is OK for packaging')
-PY
+          python scripts\check_packaging_env.py
