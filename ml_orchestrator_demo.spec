@@ -12,6 +12,13 @@ datas = [
 
 hiddenimports = [
     "matplotlib.backends.backend_qtagg",
+    # Common runtime modules that PyInstaller sometimes misses for Qt and NumPy
+    "PySide6",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "shiboken6",
+    "numpy.core._multiarray_umath",
 ]
 
 
@@ -21,7 +28,8 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    # Project-specific hooks to ensure PySide6/shiboken and related Qt plugins are collected
+    hookspath=[str(project_root / "pyinstaller_hooks")],
     hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
     runtime_hooks=[],
     excludes=[
