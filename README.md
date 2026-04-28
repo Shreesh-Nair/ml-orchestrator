@@ -399,6 +399,50 @@ A new feature is accepted only if it satisfies all checks below:
 
 1. Keep installer-first distribution for non-technical users.
 
+## Packaging Troubleshooting (Windows / PyInstaller)
+
+If you plan to build a standalone executable with PyInstaller, some binary Python packages (NumPy, SciPy, scikit-learn, pandas) include compiled extensions that must be ABI-compatible with the NumPy version in the packaging environment. A mismatch (for example, building with NumPy 2.x while wheels were compiled against NumPy 1.x) will trigger runtime warnings and may break the bundled app.
+
+Recommended, reproducible packaging steps (rapid, reliable):
+
+1. Create a clean environment dedicated to packaging. Example using conda:
+
+```powershell
+conda create -n ml-orch-pack python=3.12 -y
+conda activate ml-orch-pack
+```
+
+2. Install dependencies used for packaging and pin NumPy to a 1.x line to match many pre-built wheels (short-term workaround used in CI):
+
+```powershell
+pip install "numpy<2" "pandas<2.2" "scikit-learn==1.5.2" pyinstaller PySide6==6.6.*
+pip install -r requirements.txt  # if provided
+```
+
+3. (Optional) Run the compiled-extension scanner to inspect .pyd/.dll files detected by the current Python interpreter:
+
+```powershell
+python scripts\find_compiled_extensions.py
+type build\compiled_extensions.json
+```
+
+4. Build with PyInstaller using the provided spec which includes custom hooks for PySide6/shiboken6:
+
+```powershell
+pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+```
+
+Notes:
+- Short-term packaging stability is achieved by pinning `numpy<2` in the packaging environment (what our CI does). This avoids ABI mismatch warnings when packaging prebuilt wheels for `scipy`, `scikit-learn`, and `pandas`.
+- Long-term: upgrade all compiled wheels to NumPy 2-compatible builds or rebuild the wheels from source against NumPy 2. This is the safer long-term path but requires platform-specific wheel availability or a build farm.
+- If you see NumPy ABI warnings in build logs referencing `_multiarray_umath`, prefer building inside an environment with `numpy<2` or rebuild the dependant wheels.
+
+CI configuration:
+
+- Our Windows CI workflow pins `numpy<2` during packaging to produce reproducible builds; see `.github/workflows/ci.yml` for details.
+
+If you'd like, I can add an optional `packaging.md` with a step-by-step Conda recipe and reproducible Dockerfile to produce identical environment artifacts across machines.
+
 ## Packaging Troubleshooting
 
 - PyInstaller may emit warnings about NumPy ABI compatibility such as "A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x". This happens when binary wheels for dependencies (e.g., SciPy, scikit-learn) were built against NumPy 1.x while the build/runtime environment has NumPy 2.x.
