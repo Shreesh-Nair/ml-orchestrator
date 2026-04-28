@@ -398,6 +398,15 @@ A new feature is accepted only if it satisfies all checks below:
 ### Phase 8 - Standalone Distribution and Operations
 
 1. Keep installer-first distribution for non-technical users.
+
+## Packaging Troubleshooting
+
+- PyInstaller may emit warnings about NumPy ABI compatibility such as "A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x". This happens when binary wheels for dependencies (e.g., SciPy, scikit-learn) were built against NumPy 1.x while the build/runtime environment has NumPy 2.x.
+- Short-term workaround: pin NumPy to a 1.x-compatible range in the packaging environment (CI and local builds). The CI workflow included with this repo pins `numpy<2` to avoid these warnings during the build.
+- Long-term solution: upgrade offending packages to wheels compiled against NumPy 2.0+ (or rebuild them) and remove the NumPy pin when all binary extensions are NumPy-2-compatible.
+- If you see Qt/PySide runtime issues when packaging, ensure PyInstaller collects `PySide6` and `shiboken6` binaries and Qt plugins; custom hooks are provided under `pyinstaller_hooks/` and the spec is configured to use them.
+
+If you want, I can prepare a short CI matrix to validate packaging on Windows and Linux to catch these issues early.
 2. Add optional portable zip distribution for advanced users.
 3. Add build reproducibility checks and release validation scripts.
 4. Add diagnostics bundle export for support cases.

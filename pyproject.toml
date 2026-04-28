@@ -8,6 +8,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.9,<3.13"
 dependencies = [
+    "numpy (<2)",
     "mlflow (<3.0)",
     "pandas (<2.2)",
     "pyyaml (<7.0)",
