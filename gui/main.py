@@ -255,6 +255,40 @@ class MainWindow(QMainWindow):
         _rec_toggle_layout.addStretch()
         quality_layout.addWidget(self._rec_toggle_widget)
 
+        # Per-recommendation editors (hidden until recommendations exist)
+        self._rec_edit_widget = QWidget()
+        _rec_edit_layout = QHBoxLayout(self._rec_edit_widget)
+        _rec_edit_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Text feature columns editor
+        self.le_text_feature_columns = QLineEdit()
+        self.le_text_feature_columns.setPlaceholderText("text columns (comma-separated)")
+        self.le_text_feature_columns.setVisible(False)
+        self.le_text_feature_columns.setFixedWidth(260)
+        _rec_edit_layout.addWidget(self.le_text_feature_columns)
+
+        # Rare-category min freq editor
+        self.spin_rare_min_freq = QDoubleSpinBox()
+        self.spin_rare_min_freq.setRange(0.0, 0.5)
+        self.spin_rare_min_freq.setSingleStep(0.01)
+        self.spin_rare_min_freq.setValue(0.05)
+        self.spin_rare_min_freq.setSuffix(" min freq")
+        self.spin_rare_min_freq.setVisible(False)
+        _rec_edit_layout.addWidget(self.spin_rare_min_freq)
+
+        _rec_edit_layout.addStretch()
+        quality_layout.addWidget(self._rec_edit_widget)
+
+        # Connect signals to refresh summary when user edits values
+        try:
+            self.chk_rec_date_extract.toggled.connect(lambda _: self._update_preprocess_summary())
+            self.chk_rec_text_extract.toggled.connect(lambda _: self._update_preprocess_summary())
+            self.chk_rec_rare_grouping.toggled.connect(lambda _: self._update_preprocess_summary())
+            self.le_text_feature_columns.editingFinished.connect(self._update_preprocess_summary)
+            self.spin_rare_min_freq.valueChanged.connect(lambda _: self._update_preprocess_summary())
+        except Exception:
+            pass
+
         self.btn_export_quality_report = QPushButton("Export Quality Report")
         self.btn_export_quality_report.setEnabled(False)
         self.btn_export_quality_report.clicked.connect(self.on_export_quality_report_clicked)
@@ -735,6 +769,8 @@ class MainWindow(QMainWindow):
                 try:
                     self.chk_rec_date_extract.setVisible(True)
                     self.chk_rec_date_extract.setChecked(True)
+                    # show date detail editors if desired (kept hidden for now)
+                    self._rec_edit_widget.setVisible(True)
                 except Exception:
                     pass
             if recs.get("text_extract"):
@@ -746,6 +782,12 @@ class MainWindow(QMainWindow):
                 try:
                     self.chk_rec_text_extract.setVisible(True)
                     self.chk_rec_text_extract.setChecked(True)
+                    # prefill text column editor when available
+                    if isinstance(cols, list) and cols:
+                        self.le_text_feature_columns.setText(
+                            ",".join(str(c) for c in cols)
+                        )
+                    self.le_text_feature_columns.setVisible(True)
                 except Exception:
                     pass
             if recs.get("rare_category_min_freq"):
@@ -753,6 +795,11 @@ class MainWindow(QMainWindow):
                 try:
                     self.chk_rec_rare_grouping.setVisible(True)
                     self.chk_rec_rare_grouping.setChecked(True)
+                    try:
+                        self.spin_rare_min_freq.setValue(float(recs.get("rare_category_min_freq", 0.05)))
+                    except Exception:
+                        pass
+                    self.spin_rare_min_freq.setVisible(True)
                 except Exception:
                     pass
 
@@ -764,8 +811,32 @@ class MainWindow(QMainWindow):
                 self.chk_rec_date_extract.setVisible(False)
                 self.chk_rec_text_extract.setVisible(False)
                 self.chk_rec_rare_grouping.setVisible(False)
+                self._rec_edit_widget.setVisible(False)
+                self.le_text_feature_columns.setVisible(False)
+                self.spin_rare_min_freq.setVisible(False)
             except Exception:
                 pass
+
+    def _update_preprocess_summary(self) -> None:
+        """Refresh the `lbl_preprocess_recs` text to reflect current user edits."""
+        recs = getattr(self, "_auto_preprocess_recommendations", {}) or {}
+        if not recs:
+            self.lbl_preprocess_recs.setText("")
+            return
+
+        parts: List[str] = []
+        if recs.get("date_extract") and getattr(self, "chk_rec_date_extract", None) and self.chk_rec_date_extract.isChecked():
+            parts.append("extract date/time features")
+        if recs.get("text_extract") and getattr(self, "chk_rec_text_extract", None) and self.chk_rec_text_extract.isChecked():
+            text_cols = self.le_text_feature_columns.text().strip() if getattr(self, "le_text_feature_columns", None) else ""
+            if text_cols:
+                parts.append(f"text features for [{text_cols}]")
+            else:
+                parts.append("text feature extraction")
+        if recs.get("rare_category_min_freq") and getattr(self, "chk_rec_rare_grouping", None) and self.chk_rec_rare_grouping.isChecked():
+            parts.append(f"group rare categorical values (min {self.spin_rare_min_freq.value():.2f})")
+
+        self.lbl_preprocess_recs.setText("Recommended preprocess: " + ", ".join(parts))
 
     def on_export_quality_report_clicked(self) -> None:
         if not self.data_quality_report:
@@ -1216,8 +1287,19 @@ class MainWindow(QMainWindow):
                     include = self.chk_rec_date_extract.isChecked()
                 if key == "text_extract" and hasattr(self, "chk_rec_text_extract"):
                     include = self.chk_rec_text_extract.isChecked()
+                    # if included, allow user-edited text_feature_columns
+                    if include and hasattr(self, "le_text_feature_columns"):
+                        cols_text = self.le_text_feature_columns.text().strip()
+                        if cols_text:
+                            # convert comma-separated list to python list
+                            value = [c.strip() for c in cols_text.split(",") if c.strip()]
+                        else:
+                            # keep original value if user left blank
+                            pass
                 if key == "rare_category_min_freq" and hasattr(self, "chk_rec_rare_grouping"):
                     include = self.chk_rec_rare_grouping.isChecked()
+                    if include and hasattr(self, "spin_rare_min_freq"):
+                        value = float(self.spin_rare_min_freq.value())
                 if not include:
                     continue
                 preprocess_params[key] = value
