@@ -53,6 +53,35 @@ class TabularPreprocessHandler(BaseHandler):
             self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
         )
 
+        # Optional: extract date/time features from parseable datetime columns
+        date_extract = bool(self.stage.params.get("date_extract", False))
+        if date_extract:
+            from pandas.api import types as ptypes
+
+            for col in list(X.columns):
+                # only attempt to parse string-like or datetime dtypes
+                is_str = ptypes.is_string_dtype(X[col]) or ptypes.is_object_dtype(X[col])
+                is_dt = ptypes.is_datetime64_any_dtype(X[col])
+                if not (is_str or is_dt):
+                    continue
+
+                try:
+                    parsed = pd.to_datetime(X[col], errors="coerce")
+                except Exception:
+                    parsed = pd.Series(index=X.index, dtype="datetime64[ns]")
+
+                non_na = int(parsed.notna().sum())
+                # If a reasonable fraction parses as datetime, create extraction columns
+                if non_na >= max(1, int(0.5 * len(parsed))):
+                    X[f"{col}__year"] = parsed.dt.year
+                    X[f"{col}__month"] = parsed.dt.month
+                    X[f"{col}__day"] = parsed.dt.day
+                    X[f"{col}__hour"] = parsed.dt.hour
+                    X[f"{col}__weekday"] = parsed.dt.weekday
+                    # remove original text/date column so downstream categorical
+                    # pipelines do not attempt to impute/encode raw strings
+                    X.drop(columns=[col], inplace=True)
+
         if not (0.0 < test_size < 1.0):
             raise ValueError(f"TabularPreprocessHandler: test_size must be in (0, 1), got {test_size}")
 
@@ -79,8 +108,21 @@ class TabularPreprocessHandler(BaseHandler):
                     f"Class counts: {class_counts.to_dict()}"
                 )
 
-        categorical_cols = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
-        numeric_cols = X.select_dtypes(exclude=["object", "category", "bool"]).columns.tolist()
+        # Determine categorical and numeric columns, excluding date-like object columns
+        from pandas.api import types as ptypes
+        categorical_cols = []
+        for col in X.columns:
+            if X[col].dtype.name in {"object", "category", "bool"}:
+                try:
+                    parsed = pd.to_datetime(X[col], errors="coerce")
+                except Exception:
+                    parsed = pd.Series(index=X.index, dtype="datetime64[ns]")
+
+                if int(parsed.notna().sum()) >= max(1, int(0.5 * len(parsed))):
+                    # treat as date-like -> will be handled by extraction or numeric pipeline
+                    continue
+                categorical_cols.append(col)
+        numeric_cols = [c for c in X.columns if ptypes.is_numeric_dtype(X[c]) or ptypes.is_datetime64_any_dtype(X[c])]
 
         # Numeric pipeline
         numeric_transformers = []
