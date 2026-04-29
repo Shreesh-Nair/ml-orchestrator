@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -52,6 +53,7 @@ class TabularPreprocessHandler(BaseHandler):
         require_binary_target = bool(
             self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
         )
+        rare_category_min_freq = float(self.stage.params.get("rare_category_min_freq", 0.0))
 
         # Optional: extract date/time features from parseable datetime columns
         date_extract = bool(self.stage.params.get("date_extract", False))
@@ -113,9 +115,19 @@ class TabularPreprocessHandler(BaseHandler):
         categorical_cols = []
         for col in X.columns:
             if X[col].dtype.name in {"object", "category", "bool"}:
-                try:
-                    parsed = pd.to_datetime(X[col], errors="coerce")
-                except Exception:
+                sample = X[col].dropna().astype(str).head(30)
+                looks_date_like = bool(
+                    len(sample) > 0
+                    and sample.str.contains(r"\d", regex=True).mean() >= 0.6
+                    and sample.str.contains(r"[-/:T]", regex=True).mean() >= 0.6
+                )
+
+                if looks_date_like:
+                    try:
+                        parsed = pd.to_datetime(X[col], errors="coerce")
+                    except Exception:
+                        parsed = pd.Series(index=X.index, dtype="datetime64[ns]")
+                else:
                     parsed = pd.Series(index=X.index, dtype="datetime64[ns]")
 
                 if int(parsed.notna().sum()) >= max(1, int(0.5 * len(parsed))):
@@ -123,6 +135,18 @@ class TabularPreprocessHandler(BaseHandler):
                     continue
                 categorical_cols.append(col)
         numeric_cols = [c for c in X.columns if ptypes.is_numeric_dtype(X[c]) or ptypes.is_datetime64_any_dtype(X[c])]
+
+        # Optional: group rare categories to a shared bucket before one-hot encoding.
+        if rare_category_min_freq > 0 and categorical_cols:
+            for col in categorical_cols:
+                value_freq = X[col].value_counts(normalize=True, dropna=True)
+                rare_values = value_freq[value_freq < rare_category_min_freq].index
+                if len(rare_values) > 0:
+                    X[col] = X[col].replace(rare_values, "__OTHER__")
+
+        # Normalize missing categorical values so most_frequent imputer sees consistent null markers.
+        if categorical_cols:
+            X[categorical_cols] = X[categorical_cols].where(X[categorical_cols].notna(), np.nan)
 
         # Numeric pipeline
         numeric_transformers = []
