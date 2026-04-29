@@ -157,6 +157,19 @@ class MainWindow(QMainWindow):
         self.setup_predict_tab(predict_tab)
         self.tabs.addTab(predict_tab, "Model Library & Predict")
 
+        # Preferences file path for storing UI choices
+        from pathlib import Path as _Path
+
+        self._prefs_dir = _Path.home() / ".ml-orchestrator"
+        self._prefs_path = self._prefs_dir / "prefs.json"
+
+        # Load persisted preferences (if any)
+        try:
+            self._load_preferences()
+        except Exception:
+            # fail silently; prefs are optional
+            pass
+
     def setup_train_tab(self, tab: QWidget) -> None:
         splitter = QSplitter(Qt.Vertical)
         layout = QVBoxLayout(tab)
@@ -286,6 +299,15 @@ class MainWindow(QMainWindow):
             self.chk_rec_rare_grouping.toggled.connect(lambda _: self._update_preprocess_summary())
             self.le_text_feature_columns.editingFinished.connect(self._update_preprocess_summary)
             self.spin_rare_min_freq.valueChanged.connect(lambda _: self._update_preprocess_summary())
+        except Exception:
+            pass
+        # Persist preferences when user edits
+        try:
+            self.chk_rec_date_extract.toggled.connect(lambda _: self._save_preferences())
+            self.chk_rec_text_extract.toggled.connect(lambda _: self._save_preferences())
+            self.chk_rec_rare_grouping.toggled.connect(lambda _: self._save_preferences())
+            self.le_text_feature_columns.editingFinished.connect(self._save_preferences)
+            self.spin_rare_min_freq.valueChanged.connect(lambda _: self._save_preferences())
         except Exception:
             pass
 
@@ -837,6 +859,68 @@ class MainWindow(QMainWindow):
             parts.append(f"group rare categorical values (min {self.spin_rare_min_freq.value():.2f})")
 
         self.lbl_preprocess_recs.setText("Recommended preprocess: " + ", ".join(parts))
+
+    def _get_preferences(self) -> Dict[str, Any]:
+        prefs: Dict[str, Any] = {}
+        try:
+            prefs["date_extract"] = bool(getattr(self, "chk_rec_date_extract", None) and self.chk_rec_date_extract.isChecked())
+            prefs["text_extract"] = bool(getattr(self, "chk_rec_text_extract", None) and self.chk_rec_text_extract.isChecked())
+            prefs["text_feature_columns"] = (
+                [c.strip() for c in self.le_text_feature_columns.text().split(",") if c.strip()]
+                if getattr(self, "le_text_feature_columns", None) and self.le_text_feature_columns.text().strip()
+                else []
+            )
+            prefs["rare_category_min_freq"] = float(getattr(self, "spin_rare_min_freq", None) and self.spin_rare_min_freq.value() or 0.0)
+        except Exception:
+            pass
+        return prefs
+
+    def _save_preferences(self) -> None:
+        try:
+            self._prefs_dir.mkdir(parents=True, exist_ok=True)
+            prefs = self._get_preferences()
+            import json
+
+            with open(self._prefs_path, "w", encoding="utf-8") as f:
+                json.dump(prefs, f, indent=2)
+        except Exception:
+            # preferences are best-effort; ignore failures
+            pass
+
+    def _load_preferences(self) -> None:
+        import json
+        from pathlib import Path as _Path
+
+        p = _Path(self._prefs_path)
+        if not p.exists():
+            return
+        try:
+            with p.open("r", encoding="utf-8") as f:
+                prefs = json.load(f)
+        except Exception:
+            return
+
+        try:
+            if prefs.get("date_extract"):
+                self.chk_rec_date_extract.setVisible(True)
+                self.chk_rec_date_extract.setChecked(bool(prefs.get("date_extract", False)))
+            if prefs.get("text_extract"):
+                self.chk_rec_text_extract.setVisible(True)
+                self.chk_rec_text_extract.setChecked(bool(prefs.get("text_extract", False)))
+                cols = prefs.get("text_feature_columns") or []
+                if isinstance(cols, list) and cols:
+                    self.le_text_feature_columns.setText(",".join(cols))
+                    self.le_text_feature_columns.setVisible(True)
+            if prefs.get("rare_category_min_freq") is not None:
+                try:
+                    self.spin_rare_min_freq.setValue(float(prefs.get("rare_category_min_freq", 0.0)))
+                    self.spin_rare_min_freq.setVisible(True)
+                    self.chk_rec_rare_grouping.setVisible(True)
+                    self.chk_rec_rare_grouping.setChecked(True)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def on_export_quality_report_clicked(self) -> None:
         if not self.data_quality_report:
