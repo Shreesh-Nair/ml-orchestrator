@@ -230,6 +230,31 @@ class MainWindow(QMainWindow):
         self.lbl_data_quality_warnings.setStyleSheet("font-size: 12px; color: #a65f00;")
         quality_layout.addWidget(self.lbl_data_quality_warnings)
 
+        # Show auto-detected preprocess recommendations
+        self.lbl_preprocess_recs = QLabel("")
+        self.lbl_preprocess_recs.setWordWrap(True)
+        self.lbl_preprocess_recs.setStyleSheet("font-size: 11px; color: #2b6cb0;")
+        quality_layout.addWidget(self.lbl_preprocess_recs)
+
+        # Toggle controls for auto-recommendations (hidden until recommendations exist)
+        self._rec_toggle_widget = QWidget()
+        _rec_toggle_layout = QHBoxLayout(self._rec_toggle_widget)
+        _rec_toggle_layout.setContentsMargins(0, 0, 0, 0)
+        self.chk_rec_date_extract = QCheckBox("Date/time features")
+        self.chk_rec_date_extract.setVisible(False)
+        _rec_toggle_layout.addWidget(self.chk_rec_date_extract)
+
+        self.chk_rec_text_extract = QCheckBox("Text feature extraction")
+        self.chk_rec_text_extract.setVisible(False)
+        _rec_toggle_layout.addWidget(self.chk_rec_text_extract)
+
+        self.chk_rec_rare_grouping = QCheckBox("Group rare categories")
+        self.chk_rec_rare_grouping.setVisible(False)
+        _rec_toggle_layout.addWidget(self.chk_rec_rare_grouping)
+
+        _rec_toggle_layout.addStretch()
+        quality_layout.addWidget(self._rec_toggle_widget)
+
         self.btn_export_quality_report = QPushButton("Export Quality Report")
         self.btn_export_quality_report.setEnabled(False)
         self.btn_export_quality_report.clicked.connect(self.on_export_quality_report_clicked)
@@ -676,6 +701,7 @@ class MainWindow(QMainWindow):
             self.lbl_data_quality_summary.setText("Load a dataset to see quality summary.")
             self.lbl_data_quality_warnings.setText("")
             self.btn_export_quality_report.setEnabled(False)
+            self.lbl_preprocess_recs.setText("")
             return
 
         summary = report.get("summary") or {}
@@ -699,6 +725,47 @@ class MainWindow(QMainWindow):
             self.lbl_data_quality_warnings.setText("No major quality warnings detected.")
 
         self.btn_export_quality_report.setEnabled(True)
+        # Update preprocess recommendations hint
+        recs = getattr(self, "_auto_preprocess_recommendations", {}) or {}
+        if recs:
+            parts: List[str] = []
+            if recs.get("date_extract"):
+                parts.append("extract date/time features")
+                # show toggle and default to checked
+                try:
+                    self.chk_rec_date_extract.setVisible(True)
+                    self.chk_rec_date_extract.setChecked(True)
+                except Exception:
+                    pass
+            if recs.get("text_extract"):
+                cols = recs.get("text_feature_columns") or []
+                if isinstance(cols, list) and cols:
+                    parts.append(f"text features for {cols}")
+                else:
+                    parts.append("text feature extraction")
+                try:
+                    self.chk_rec_text_extract.setVisible(True)
+                    self.chk_rec_text_extract.setChecked(True)
+                except Exception:
+                    pass
+            if recs.get("rare_category_min_freq"):
+                parts.append("group rare categorical values")
+                try:
+                    self.chk_rec_rare_grouping.setVisible(True)
+                    self.chk_rec_rare_grouping.setChecked(True)
+                except Exception:
+                    pass
+
+            self.lbl_preprocess_recs.setText("Recommended preprocess: " + ", ".join(parts))
+        else:
+            self.lbl_preprocess_recs.setText("")
+            # hide toggles when no recommendations
+            try:
+                self.chk_rec_date_extract.setVisible(False)
+                self.chk_rec_text_extract.setVisible(False)
+                self.chk_rec_rare_grouping.setVisible(False)
+            except Exception:
+                pass
 
     def on_export_quality_report_clicked(self) -> None:
         if not self.data_quality_report:
@@ -1142,6 +1209,16 @@ class MainWindow(QMainWindow):
                 if value is None:
                     continue
                 if isinstance(value, list) and len(value) == 0:
+                    continue
+                # Respect user toggles for recommended preprocess actions
+                include = True
+                if key == "date_extract" and hasattr(self, "chk_rec_date_extract"):
+                    include = self.chk_rec_date_extract.isChecked()
+                if key == "text_extract" and hasattr(self, "chk_rec_text_extract"):
+                    include = self.chk_rec_text_extract.isChecked()
+                if key == "rare_category_min_freq" and hasattr(self, "chk_rec_rare_grouping"):
+                    include = self.chk_rec_rare_grouping.isChecked()
+                if not include:
                     continue
                 preprocess_params[key] = value
 
