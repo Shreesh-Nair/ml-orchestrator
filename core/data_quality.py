@@ -109,6 +109,46 @@ def analyze_data_quality(df: pd.DataFrame, target_column: str | None = None) -> 
     if outlier_columns:
         warnings.append(f"Potential heavy outliers in numeric columns: {outlier_columns}")
 
+    date_like_columns: List[str] = []
+    text_like_columns: List[str] = []
+    rare_heavy_categorical_columns: List[str] = []
+
+    for col in df.columns:
+        if target_column and col == target_column:
+            continue
+
+        series = df[col]
+        dtype = series.dtype
+        if not (
+            pd.api.types.is_object_dtype(series)
+            or pd.api.types.is_string_dtype(series)
+            or isinstance(dtype, pd.CategoricalDtype)
+        ):
+            continue
+
+        sample = series.dropna().astype(str).head(200)
+        if sample.empty:
+            continue
+
+        looks_date_like = bool(
+            sample.str.contains(r"\d", regex=True).mean() >= 0.60
+            and sample.str.contains(r"[-/:T]", regex=True).mean() >= 0.60
+        )
+        if looks_date_like:
+            parsed = pd.to_datetime(series, errors="coerce")
+            if float(parsed.notna().mean()) >= 0.60:
+                date_like_columns.append(col)
+                continue
+
+        avg_word_count = float(sample.str.split().str.len().mean())
+        avg_char_len = float(sample.str.len().mean())
+        if avg_word_count >= 2.0 or avg_char_len >= 20.0:
+            text_like_columns.append(col)
+
+        value_freq = sample.value_counts(normalize=True)
+        if len(value_freq) >= 8 and float((value_freq < 0.05).mean()) >= 0.50:
+            rare_heavy_categorical_columns.append(col)
+
     summary = {
         "rows": row_count,
         "columns": column_count,
@@ -118,6 +158,9 @@ def analyze_data_quality(df: pd.DataFrame, target_column: str | None = None) -> 
         "high_cardinality_columns": high_cardinality_columns,
         "potential_id_columns": potential_id_columns,
         "outlier_columns": outlier_columns,
+        "date_like_columns": date_like_columns,
+        "text_like_columns": text_like_columns,
+        "rare_heavy_categorical_columns": rare_heavy_categorical_columns,
         "target": target_column,
     }
 
@@ -276,6 +319,7 @@ def recommend_quick_fixes(report: Dict[str, Any]) -> Dict[str, Any]:
         "drop_duplicate_rows": False,
         "drop_constant_columns": False,
         "missing_strategy": "none",
+        "preprocess_params": {},
         "rationale": [],
     }
 
@@ -325,5 +369,32 @@ def recommend_quick_fixes(report: Dict[str, Any]) -> Dict[str, Any]:
     # Ensure missing_strategy is valid
     if recommendations["missing_strategy"] not in {"none", "drop_rows", "fill_simple"}:
         recommendations["missing_strategy"] = "none"
+
+    # Feature-prep recommendations for preprocessing stage.
+    preprocess_params: Dict[str, Any] = {}
+    date_like_columns = summary.get("date_like_columns") or []
+    if date_like_columns:
+        preprocess_params["date_extract"] = True
+        recommendations["rationale"].append(
+            f"Date-like columns detected: {date_like_columns}; enabling date feature extraction."
+        )
+
+    text_like_columns = summary.get("text_like_columns") or []
+    if text_like_columns:
+        preprocess_params["text_extract"] = True
+        preprocess_params["text_feature_columns"] = text_like_columns
+        preprocess_params["text_drop_original"] = False
+        recommendations["rationale"].append(
+            f"Text-like columns detected: {text_like_columns}; enabling text feature extraction."
+        )
+
+    rare_heavy = summary.get("rare_heavy_categorical_columns") or []
+    if rare_heavy:
+        preprocess_params["rare_category_min_freq"] = 0.05
+        recommendations["rationale"].append(
+            f"Rare-heavy categoricals detected: {rare_heavy}; enabling rare category grouping."
+        )
+
+    recommendations["preprocess_params"] = preprocess_params
 
     return recommendations

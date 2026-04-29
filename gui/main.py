@@ -136,6 +136,8 @@ class MainWindow(QMainWindow):
         self.batch_input_path: Path | None = None
         self.run_worker: PipelineRunWorker | None = None
         self.data_quality_report: Dict[str, Any] | None = None
+        self._auto_recommendations: Dict[str, Any] | None = None
+        self._auto_preprocess_recommendations: Dict[str, Any] = {}
 
         self.selected_task: str = "classification"
         self.selected_model_type: str = "classification_rf"
@@ -508,11 +510,16 @@ class MainWindow(QMainWindow):
             # Also compute automated recommendations for quick-fixes
             try:
                 self._auto_recommendations = recommend_quick_fixes(self.data_quality_report)
+                rec_params = self._auto_recommendations.get("preprocess_params") or {}
+                self._auto_preprocess_recommendations = rec_params if isinstance(rec_params, dict) else {}
             except Exception:
                 self._auto_recommendations = None
+                self._auto_preprocess_recommendations = {}
             self._update_data_quality_labels(self.data_quality_report)
         except Exception as exc:
             self.data_quality_report = None
+            self._auto_recommendations = None
+            self._auto_preprocess_recommendations = {}
             self.lbl_data_quality_summary.setText("Unable to compute quality summary.")
             self.lbl_data_quality_warnings.setText(str(exc))
 
@@ -1127,6 +1134,16 @@ class MainWindow(QMainWindow):
                 },
             ],
         }
+
+        preprocess_params = config["stages"][1]["params"]
+        if self._auto_preprocess_recommendations:
+            # Only add non-empty recommendations from data quality analysis.
+            for key, value in self._auto_preprocess_recommendations.items():
+                if value is None:
+                    continue
+                if isinstance(value, list) and len(value) == 0:
+                    continue
+                preprocess_params[key] = value
 
         yaml_path = GENERATED_DIR / f"{pipeline_name}.yml"
         with yaml_path.open("w", encoding="utf-8") as f:
