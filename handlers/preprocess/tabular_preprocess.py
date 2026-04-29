@@ -54,6 +54,9 @@ class TabularPreprocessHandler(BaseHandler):
             self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
         )
         rare_category_min_freq = float(self.stage.params.get("rare_category_min_freq", 0.0))
+        text_extract = bool(self.stage.params.get("text_extract", False))
+        text_drop_original = bool(self.stage.params.get("text_drop_original", False))
+        text_feature_columns = self.stage.params.get("text_feature_columns")
 
         # Optional: extract date/time features from parseable datetime columns
         date_extract = bool(self.stage.params.get("date_extract", False))
@@ -82,6 +85,36 @@ class TabularPreprocessHandler(BaseHandler):
                     X[f"{col}__weekday"] = parsed.dt.weekday
                     # remove original text/date column so downstream categorical
                     # pipelines do not attempt to impute/encode raw strings
+                    X.drop(columns=[col], inplace=True)
+
+        # Optional: extract basic text features from selected or inferred text columns.
+        if text_extract:
+            from pandas.api import types as ptypes
+
+            if isinstance(text_feature_columns, list):
+                candidate_text_cols = [
+                    c for c in text_feature_columns if c in X.columns and (ptypes.is_string_dtype(X[c]) or ptypes.is_object_dtype(X[c]))
+                ]
+            else:
+                candidate_text_cols = [
+                    c for c in X.columns if (ptypes.is_string_dtype(X[c]) or ptypes.is_object_dtype(X[c]))
+                ]
+
+            for col in candidate_text_cols:
+                sample = X[col].dropna().astype(str).head(30)
+                looks_date_like = bool(
+                    len(sample) > 0
+                    and sample.str.contains(r"\d", regex=True).mean() >= 0.6
+                    and sample.str.contains(r"[-/:T]", regex=True).mean() >= 0.6
+                )
+                if looks_date_like:
+                    continue
+
+                text_series = X[col].fillna("").astype(str)
+                X[f"{col}__char_len"] = text_series.str.len()
+                X[f"{col}__word_count"] = text_series.str.split().str.len()
+
+                if text_drop_original:
                     X.drop(columns=[col], inplace=True)
 
         if not (0.0 < test_size < 1.0):
