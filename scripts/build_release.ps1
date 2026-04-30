@@ -13,6 +13,6 @@ Write-Host "Building release package for version $AppVersion..." -ForegroundColo
 
 & "$ScriptRoot\build_demo.ps1"
 & "$ScriptRoot\build_installer.ps1" -AppVersion $AppVersion
-& "$ScriptRoot\verify_release_artifact.ps1"
+& "$ScriptRoot\verify_release_artifact.ps1" -AppVersion $AppVersion
 
 Write-Host "Release package completed successfully." -ForegroundColor Green

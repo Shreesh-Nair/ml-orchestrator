@@ -72,6 +72,7 @@ jobs:
           path: |
             dist/installer/MLOrchestratorDemoSetup.exe
             dist/installer/MLOrchestratorDemoSetup.exe.sha256.txt
+            dist/installer/release-manifest.json
           retention-days: 30
 
       - name: Upload release assets
@@ -81,6 +82,7 @@ jobs:
           files: |
             dist/installer/MLOrchestratorDemoSetup.exe
             dist/installer/MLOrchestratorDemoSetup.exe.sha256.txt
+            dist/installer/release-manifest.json
           tag_name: ${{ github.event.release.tag_name }}
 
       - name: Verify release assets uploaded
@@ -92,6 +94,7 @@ jobs:
             const expectedAssets = [
               'MLOrchestratorDemoSetup.exe',
               'MLOrchestratorDemoSetup.exe.sha256.txt',
+              'release-manifest.json',
             ];
 
             const { data: assets } = await github.rest.repos.listReleaseAssets({

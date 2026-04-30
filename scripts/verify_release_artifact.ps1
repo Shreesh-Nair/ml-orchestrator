@@ -1,5 +1,6 @@
 param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$AppVersion = "0.1.0",
     [string]$InstallerPath,
     [string]$DemoExePath
 )
@@ -38,8 +39,26 @@ $checksumPath = Join-Path $installerItem.DirectoryName "MLOrchestratorDemoSetup.
 $checksumLine = "{0}  {1}" -f $installerHash.Hash, $installerItem.Name
 Set-Content -Path $checksumPath -Value $checksumLine -Encoding ascii
 
+$manifestPath = Join-Path $installerItem.DirectoryName "release-manifest.json"
+$manifest = [ordered]@{
+    app_version = $AppVersion
+    generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+    demo_executable = [ordered]@{
+        path = $DemoExePath
+        size_bytes = $demoItem.Length
+    }
+    installer = [ordered]@{
+        path = $InstallerPath
+        size_bytes = $installerItem.Length
+        sha256 = $installerHash.Hash
+    }
+    checksum_file = $checksumPath
+}
+$manifest | ConvertTo-Json -Depth 4 | Set-Content -Path $manifestPath -Encoding utf8
+
 Write-Host "Verified release artifacts:" -ForegroundColor Green
 Write-Host "  Demo executable: $DemoExePath ($([math]::Round($demoItem.Length / 1MB, 2)) MB)"
 Write-Host "  Installer:       $InstallerPath ($([math]::Round($installerItem.Length / 1MB, 2)) MB)"
 Write-Host "  SHA256:          $($installerHash.Hash)"
 Write-Host "  Checksum file:    $checksumPath"
+Write-Host "  Manifest:         $manifestPath"
