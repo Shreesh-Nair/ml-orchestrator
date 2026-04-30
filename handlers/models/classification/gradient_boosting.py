@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 import numpy as np
-from xgboost import XGBClassifier
+try:
+    from xgboost import XGBClassifier
+except Exception:  # pragma: no cover - fallback keeps the app usable without xgboost installed
+    from sklearn.ensemble import HistGradientBoostingClassifier as XGBClassifier
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
 from handlers.base import BaseHandler
@@ -45,14 +48,22 @@ class GradientBoostingHandler(BaseHandler):
             if "learning_rate" in params:
                 learning_rate = float(params["learning_rate"])
 
-        model = XGBClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            random_state=random_state,
-            eval_metric="logloss",
-            verbosity=0,
-        )
+        if XGBClassifier.__module__.startswith("xgboost"):
+            model = XGBClassifier(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                learning_rate=learning_rate,
+                random_state=random_state,
+                eval_metric="logloss",
+                verbosity=0,
+            )
+        else:
+            model = XGBClassifier(
+                max_depth=max_depth,
+                learning_rate=learning_rate,
+                max_iter=n_estimators,
+                random_state=random_state,
+            )
         model.fit(X_train, y_train)
 
         y_pred = model.predict(X_test)

@@ -119,6 +119,29 @@ TASK_CONFIG: Dict[str, Dict[str, Any]] = {
     },
 }
 
+TASK_TEMPLATES: Dict[str, Dict[str, str]] = {
+    "Churn Prediction": {
+        "task": "classification",
+        "model_type": "classification_logreg",
+        "description": "Binary customer retention workflow with a simple, interpretable classifier.",
+    },
+    "Fraud Detection": {
+        "task": "anomaly",
+        "model_type": "anomaly_isolation_forest",
+        "description": "Anomaly detection workflow for suspicious transaction screening.",
+    },
+    "House Price Prediction": {
+        "task": "regression",
+        "model_type": "regression_ridge",
+        "description": "Regression workflow for stable numeric price prediction on tabular data.",
+    },
+    "Demand Forecasting": {
+        "task": "regression",
+        "model_type": "regression_rf",
+        "description": "A flexible forecasting starter that handles mixed tabular features well.",
+    },
+}
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -221,6 +244,17 @@ class MainWindow(QMainWindow):
         task_row.addStretch()
         top_layout.addLayout(task_row)
 
+        template_row = QHBoxLayout()
+        template_row.addWidget(QLabel("Starter template:"))
+        self.template_combo = QComboBox()
+        self.template_combo.addItem("Choose a template...", "")
+        for template_name in TASK_TEMPLATES:
+            self.template_combo.addItem(template_name, template_name)
+        self.template_combo.currentIndexChanged.connect(self.on_template_changed)
+        template_row.addWidget(self.template_combo)
+        template_row.addStretch()
+        top_layout.addLayout(template_row)
+
         algo_row = QHBoxLayout()
         algo_row.addWidget(QLabel("Algorithm:"))
         self.model_combo = QComboBox()
@@ -228,6 +262,11 @@ class MainWindow(QMainWindow):
         algo_row.addWidget(self.model_combo)
         algo_row.addStretch()
         top_layout.addLayout(algo_row)
+
+        self.lbl_model_guidance = QLabel("Select a model to see a plain-language explanation.")
+        self.lbl_model_guidance.setWordWrap(True)
+        self.lbl_model_guidance.setStyleSheet("font-size: 12px; color: #2b4c7e;")
+        top_layout.addWidget(self.lbl_model_guidance)
 
         target_row = QHBoxLayout()
         target_row.addWidget(QLabel("Target column:"))
@@ -1089,11 +1128,48 @@ class MainWindow(QMainWindow):
         if isinstance(task, str) and task in TASK_CONFIG:
             self.selected_task = task
         self._refresh_model_options()
+        self._update_model_guidance()
 
     def on_model_changed(self, index: int) -> None:
         model_type = self.model_combo.itemData(index)
         if isinstance(model_type, str):
             self.selected_model_type = model_type
+        self._update_model_guidance()
+
+    def on_template_changed(self, index: int) -> None:
+        template_name = self.template_combo.itemData(index)
+        if not isinstance(template_name, str) or not template_name:
+            return
+
+        template = TASK_TEMPLATES.get(template_name)
+        if not template:
+            return
+
+        task = template.get("task", "classification")
+        model_type = template.get("model_type", "classification_rf")
+
+        task_index = self.task_combo.findData(task)
+        if task_index >= 0:
+            self.task_combo.blockSignals(True)
+            self.task_combo.setCurrentIndex(task_index)
+            self.task_combo.blockSignals(False)
+            self.selected_task = task
+
+        self._refresh_model_options()
+
+        model_index = self.model_combo.findData(model_type)
+        if model_index >= 0:
+            self.model_combo.setCurrentIndex(model_index)
+            self.selected_model_type = model_type
+
+        description = template.get("description", "")
+        self.lbl_model_guidance.setText(
+            f"{template_name}: {description} The selected model will be updated to match this starter workflow."
+        )
+
+    def _update_model_guidance(self) -> None:
+        guidance = self._get_model_guidance(self.selected_task, self.selected_model_type)
+        self.lbl_model_guidance.setText(guidance)
 
     def _refresh_model_options(self) -> None:
         task_cfg = TASK_CONFIG.get(self.selected_task, TASK_CONFIG["classification"])
@@ -1110,6 +1186,24 @@ class MainWindow(QMainWindow):
             selected = self.model_combo.currentData()
             if isinstance(selected, str):
                 self.selected_model_type = selected
+
+    def _get_model_guidance(self, task: str, model_type: str) -> str:
+        explanations = {
+            "classification_rf": "Random Forest is a strong default for tabular classification when you want robust results with minimal tuning.",
+            "classification_logreg": "Logistic Regression is a simple, interpretable baseline when linear decision boundaries are acceptable.",
+            "classification_xgboost": "XGBoost is useful when you want a powerful gradient-boosted tree model for tabular classification.",
+            "regression_rf": "Random Forest Regressor handles mixed tabular data well and is a strong default for many regression tasks.",
+            "regression_linear": "Linear Regression is the simplest regression baseline when relationships are mostly linear.",
+            "regression_ridge": "Ridge Regression helps stabilize models when features are correlated.",
+            "regression_lasso": "Lasso Regression can shrink weak features to zero and is useful when you want sparsity.",
+            "regression_elasticnet": "ElasticNet blends Ridge and Lasso behavior for a balanced regularized regression baseline.",
+            "anomaly_isolation_forest": "Isolation Forest is the safest default for anomaly detection on tabular data.",
+            "anomaly_lof": "Local Outlier Factor is useful when local density differences matter more than global structure.",
+            "anomaly_ocsvm": "One-Class SVM is a classic anomaly detector when the normal class is relatively compact.",
+        }
+        task_label = TASK_CONFIG.get(task, {}).get("label", task.title())
+        reason = explanations.get(model_type, "This model is available as a tabular starter option.")
+        return f"{task_label}: {reason}"
 
     def _validate_target_for_task(self) -> Dict[str, int]:
         if self.current_df is None:
