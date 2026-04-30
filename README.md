@@ -399,58 +399,175 @@ A new feature is accepted only if it satisfies all checks below:
 
 1. Keep installer-first distribution for non-technical users.
 
-## Packaging Troubleshooting (Windows / PyInstaller)
+## Packaging and Distribution
 
-If you plan to build a standalone executable with PyInstaller, some binary Python packages (NumPy, SciPy, scikit-learn, pandas) include compiled extensions that must be ABI-compatible with the NumPy version in the packaging environment. A mismatch (for example, building with NumPy 2.x while wheels were compiled against NumPy 1.x) will trigger runtime warnings and may break the bundled app.
+### Overview
 
-Recommended, reproducible packaging steps (rapid, reliable):
+ML Orchestrator can be packaged as a standalone Windows executable using PyInstaller. This allows non-technical users to install and run the app without requiring Python or any manual setup.
 
-1. Create a clean environment dedicated to packaging. Example using conda:
+**Key constraint**: Binary Python packages (NumPy, SciPy, scikit-learn, pandas) must be ABI-compatible. To ensure reproducible builds, the packaging environment pins `numpy<2` to match pre-built wheels.
+
+### Prerequisites
+
+- Python 3.11 or 3.12
+- PyInstaller 6.19+
+- All dependencies from `pyproject.toml`
+
+### Quick Packaging Guide
+
+#### Option 1: Using Conda (Recommended for CI & Local Builds)
 
 ```powershell
+# Create a clean packaging environment
 conda create -n ml-orch-pack python=3.12 -y
 conda activate ml-orch-pack
-```
 
-2. Install dependencies used for packaging and pin NumPy to a 1.x line to match many pre-built wheels (short-term workaround used in CI):
+# Install all dependencies with numpy pinned to <2
+pip install "numpy<2" "pandas<2.2" "scikit-learn==1.5.2" "PySide6>=6.6,<6.7" \
+  pyinstaller pyyaml opencv-python-headless<4.11 joblib mlflow<3.0
 
-```powershell
-pip install "numpy<2" "pandas<2.2" "scikit-learn==1.5.2" pyinstaller PySide6==6.6.*
-pip install -r requirements.txt  # if provided
-```
+# Verify packaging environment (should report numpy < 2.0)
+python scripts/check_packaging_env.py
 
-3. (Optional) Run the compiled-extension scanner to inspect .pyd/.dll files detected by the current Python interpreter:
-
-```powershell
-python scripts\find_compiled_extensions.py
-type build\compiled_extensions.json
-```
-
-4. Build with PyInstaller using the provided spec which includes custom hooks for PySide6/shiboken6:
-
-```powershell
+# Build the executable
 pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
 ```
 
-Notes:
-- Short-term packaging stability is achieved by pinning `numpy<2` in the packaging environment (what our CI does). This avoids ABI mismatch warnings when packaging prebuilt wheels for `scipy`, `scikit-learn`, and `pandas`.
-- Long-term: upgrade all compiled wheels to NumPy 2-compatible builds or rebuild the wheels from source against NumPy 2. This is the safer long-term path but requires platform-specific wheel availability or a build farm.
-- If you see NumPy ABI warnings in build logs referencing `_multiarray_umath`, prefer building inside an environment with `numpy<2` or rebuild the dependant wheels.
+#### Option 2: Using Poetry (Alternative, Not in CI Yet)
 
-CI configuration:
+```powershell
+# From your main development environment, ensure you have poetry
+poetry install
 
-- Our Windows CI workflow pins `numpy<2` during packaging to produce reproducible builds; see `.github/workflows/ci.yml` for details.
+# Create a packaging venv via poetry
+poetry env create --name packaging --python 3.12
 
-If you'd like, I can add an optional `packaging.md` with a step-by-step Conda recipe and reproducible Dockerfile to produce identical environment artifacts across machines.
+# Activate and verify
+poetry env info --env-path  # shows path to packaging environment
+poetry run python scripts/check_packaging_env.py
 
-## Packaging Troubleshooting
+# Build
+poetry run pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+```
 
-- PyInstaller may emit warnings about NumPy ABI compatibility such as "A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x". This happens when binary wheels for dependencies (e.g., SciPy, scikit-learn) were built against NumPy 1.x while the build/runtime environment has NumPy 2.x.
-- Short-term workaround: pin NumPy to a 1.x-compatible range in the packaging environment (CI and local builds). The CI workflow included with this repo pins `numpy<2` to avoid these warnings during the build.
-- Long-term solution: upgrade offending packages to wheels compiled against NumPy 2.0+ (or rebuild them) and remove the NumPy pin when all binary extensions are NumPy-2-compatible.
-- If you see Qt/PySide runtime issues when packaging, ensure PyInstaller collects `PySide6` and `shiboken6` binaries and Qt plugins; custom hooks are provided under `pyinstaller_hooks/` and the spec is configured to use them.
+### Output
 
-If you want, I can prepare a short CI matrix to validate packaging on Windows and Linux to catch these issues early.
+After a successful build, the executable is located at:
+
+```
+dist/MLOrchestratorDemo/MLOrchestratorDemo.exe
+```
+
+Size: approximately 20-25 MB (self-contained with all dependencies)
+
+To test the build:
+
+```powershell
+# Run the exe (will launch the GUI)
+.\dist\MLOrchestratorDemo\MLOrchestratorDemo.exe
+```
+
+### Troubleshooting
+
+#### Issue: "A module compiled using NumPy 1.x cannot run in NumPy 2.x"
+
+**Cause**: Binary wheels for scikit-learn, pandas, or SciPy were built against NumPy 1.x, but the packaging environment has NumPy 2.x.
+
+**Solution**:
+1. Verify the packaging environment:
+   ```powershell
+   python scripts/check_packaging_env.py
+   ```
+   This should pass (numpy < 2.0).
+
+2. If it fails, reinstall in a fresh conda environment:
+   ```powershell
+   conda create -n ml-orch-pack-fresh python=3.12 -y
+   conda activate ml-orch-pack-fresh
+   pip install "numpy<2" "pandas<2.2" "scikit-learn==1.5.2" ...
+   ```
+
+3. Clean PyInstaller cache and rebuild:
+   ```powershell
+   pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+   ```
+
+#### Issue: "Qt Platform Plugin Not Found"
+
+**Cause**: PySide6/Qt plugins not bundled correctly.
+
+**Solution**:
+1. Ensure the custom hook is in place:
+   ```powershell
+   ls pyinstaller_hooks/hook-PySide6.py
+   ```
+
+2. Check that the spec file includes the hook directory:
+   ```powershell
+   grep "pathex" ml_orchestrator_demo.spec
+   ```
+
+3. Rebuild with `--clean`:
+   ```powershell
+   pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+   ```
+
+#### Issue: "Module Not Found: core.data_quality" (or other app modules)
+
+**Cause**: The spec file's `pathex` doesn't include the project root.
+
+**Solution**:
+1. Open `ml_orchestrator_demo.spec` and verify it includes:
+   ```python
+   pathex=['C:\\path\\to\\ml-orchestrator\\ml-orchestrator']
+   ```
+
+2. Update the path if needed and rebuild:
+   ```powershell
+   pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+   ```
+
+### CI/CD Integration
+
+Our GitHub Actions workflow (`.github/workflows/ci-packaging-matrix.yml`) automates packaging on:
+- Windows + Python 3.11 & 3.12
+- Linux + Python 3.11 & 3.12
+
+Each matrix job:
+1. Creates an isolated packaging environment with `numpy<2`
+2. Runs `scripts/check_packaging_env.py` to validate
+3. Builds the executable
+4. Uploads the build artifact
+
+To run packaging CI locally:
+```powershell
+# Install act (GitHub Actions runner emulator)
+choco install act  # or manual install from https://github.com/nektos/act
+
+# Run the packaging matrix workflow
+act -j packaging-matrix
+```
+
+### Custom PyInstaller Hooks
+
+Project-specific hooks are under `pyinstaller_hooks/`:
+
+- **hook-PySide6.py**: Guards PySide6/shiboken6 module collection to prevent analysis bloat and missing dependencies.
+
+If you add new dependencies with complex import structures, add a hook:
+```python
+# pyinstaller_hooks/hook-mymodule.py
+from PyInstaller.utils.hooks import collect_submodules
+
+hiddenimports = collect_submodules('mymodule')
+```
+
+### Long-Term Path Forward
+
+- **Current approach (short-term)**: Pin NumPy <2 in packaging env. Stable and reproducible but requires manual cache cleanup if numpy config changes.
+- **Future approach (long-term)**: Upgrade all wheels to NumPy 2 compatible builds or implement wheel pinning via lock files (Poetry, pip-compile).
+
+
 2. Add optional portable zip distribution for advanced users.
 3. Add build reproducibility checks and release validation scripts.
 4. Add diagnostics bundle export for support cases.

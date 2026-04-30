@@ -29,12 +29,14 @@ dist/
 *.egg-info/
 pip-wheel-metadata/
 
-# Virtual environments
+# Virtual environments (local dev, packaging, testing)
 .venv/
+.venv_*/
 venv/
 env/
 ENV/
 .python-version
+.env
 
 # IDE/editor and OS files
 .vscode/
@@ -48,6 +50,25 @@ Thumbs.db
 /models/
 /examples/generated/
 /mlruns/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*~
+.DS_Store
+Thumbs.db
+
+# PyInstaller build artifacts (keep build/ in .gitignore)
+spec.d/
+onefile_*.txt
+
+# Poetry lock files (optional - typically committed)
+# poetry.lock
+
+# Local testing artifacts
+test-output/
+*.json.backup
 
 # Large/local data artifacts
 /data/fraud.csv

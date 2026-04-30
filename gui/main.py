@@ -247,6 +247,10 @@ class MainWindow(QMainWindow):
         self.lbl_preprocess_recs = QLabel("")
         self.lbl_preprocess_recs.setWordWrap(True)
         self.lbl_preprocess_recs.setStyleSheet("font-size: 11px; color: #2b6cb0;")
+        self.lbl_preprocess_recs.setToolTip(
+            "Recommended preprocessing features detected in your dataset. "
+            "Check boxes to enable, or adjust parameters as needed."
+        )
         quality_layout.addWidget(self.lbl_preprocess_recs)
 
         # Toggle controls for auto-recommendations (hidden until recommendations exist)
@@ -255,14 +259,26 @@ class MainWindow(QMainWindow):
         _rec_toggle_layout.setContentsMargins(0, 0, 0, 0)
         self.chk_rec_date_extract = QCheckBox("Date/time features")
         self.chk_rec_date_extract.setVisible(False)
+        self.chk_rec_date_extract.setToolTip(
+            "Automatically extract features from date/time columns "
+            "(e.g., year, month, day, day-of-week). Helps capture temporal patterns."
+        )
         _rec_toggle_layout.addWidget(self.chk_rec_date_extract)
 
         self.chk_rec_text_extract = QCheckBox("Text feature extraction")
         self.chk_rec_text_extract.setVisible(False)
+        self.chk_rec_text_extract.setToolTip(
+            "Generate features from text columns (word count, character length, etc.). "
+            "Specify target columns below. Original text is preserved."
+        )
         _rec_toggle_layout.addWidget(self.chk_rec_text_extract)
 
         self.chk_rec_rare_grouping = QCheckBox("Group rare categories")
         self.chk_rec_rare_grouping.setVisible(False)
+        self.chk_rec_rare_grouping.setToolTip(
+            "Combine infrequent categorical values into an 'Other' category. "
+            "Improves model stability and prevents overfitting on rare classes."
+        )
         _rec_toggle_layout.addWidget(self.chk_rec_rare_grouping)
 
         _rec_toggle_layout.addStretch()
@@ -278,6 +294,10 @@ class MainWindow(QMainWindow):
         self.le_text_feature_columns.setPlaceholderText("text columns (comma-separated)")
         self.le_text_feature_columns.setVisible(False)
         self.le_text_feature_columns.setFixedWidth(260)
+        self.le_text_feature_columns.setToolTip(
+            "List text columns to extract features from. "
+            "Example: description,comments,feedback"
+        )
         _rec_edit_layout.addWidget(self.le_text_feature_columns)
 
         # Rare-category min freq editor
@@ -285,8 +305,12 @@ class MainWindow(QMainWindow):
         self.spin_rare_min_freq.setRange(0.0, 0.5)
         self.spin_rare_min_freq.setSingleStep(0.01)
         self.spin_rare_min_freq.setValue(0.05)
-        self.spin_rare_min_freq.setSuffix(" min freq")
+        self.spin_rare_min_freq.setSuffix(" (min frequency)")
         self.spin_rare_min_freq.setVisible(False)
+        self.spin_rare_min_freq.setToolTip(
+            "Categories with frequency < this threshold are grouped as 'Other'. "
+            "Default: 0.05 (5%). Higher = more aggressive grouping."
+        )
         _rec_edit_layout.addWidget(self.spin_rare_min_freq)
 
         _rec_edit_layout.addStretch()
@@ -335,19 +359,34 @@ class MainWindow(QMainWindow):
         quality_layout.addLayout(quick_fix_row)
 
         self.btn_apply_quality_fixes = QPushButton("Apply Quick Fixes")
+        self.btn_apply_quality_fixes.setToolTip(
+            "Apply manual data quality fixes (drop duplicates, drop constant columns, handle missing values). "
+            "Use checkboxes above to select which fixes to apply."
+        )
         self.btn_apply_quality_fixes.clicked.connect(self.on_apply_quality_fixes_clicked)
         quick_fix_action_row = QHBoxLayout()
         self.btn_preview_quality_fixes = QPushButton("Preview Quick Fixes")
+        self.btn_preview_quality_fixes.setToolTip(
+            "Preview what changes will be applied before actually modifying your data."
+        )
         self.btn_preview_quality_fixes.clicked.connect(self.on_preview_quality_fixes_clicked)
         quick_fix_action_row.addWidget(self.btn_preview_quality_fixes)
         # Button to apply recommended automatic quick-fixes
         self.btn_apply_recommended = QPushButton("Apply Recommended Fixes")
+        self.btn_apply_recommended.setToolTip(
+            "Automatically apply data quality quick-fixes and preprocessing recommendations. "
+            "You can customize which recommendations to include before applying. "
+            "These settings are saved for your next session."
+        )
         self.btn_apply_recommended.clicked.connect(self.on_apply_recommended_clicked)
         quick_fix_action_row.addWidget(self.btn_apply_recommended)
         quick_fix_action_row.addWidget(self.btn_apply_quality_fixes)
 
         self.btn_revert_quality_fixes = QPushButton("Revert Quick Fixes")
         self.btn_revert_quality_fixes.setEnabled(False)
+        self.btn_revert_quality_fixes.setToolTip(
+            "Restore your data to its original state before quick fixes were applied."
+        )
         self.btn_revert_quality_fixes.clicked.connect(self.on_revert_quality_fixes_clicked)
         quick_fix_action_row.addWidget(self.btn_revert_quality_fixes)
         quality_layout.addLayout(quick_fix_action_row)
@@ -847,18 +886,35 @@ class MainWindow(QMainWindow):
             return
 
         parts: List[str] = []
-        if recs.get("date_extract") and getattr(self, "chk_rec_date_extract", None) and self.chk_rec_date_extract.isChecked():
-            parts.append("extract date/time features")
-        if recs.get("text_extract") and getattr(self, "chk_rec_text_extract", None) and self.chk_rec_text_extract.isChecked():
-            text_cols = self.le_text_feature_columns.text().strip() if getattr(self, "le_text_feature_columns", None) else ""
-            if text_cols:
-                parts.append(f"text features for [{text_cols}]")
-            else:
-                parts.append("text feature extraction")
-        if recs.get("rare_category_min_freq") and getattr(self, "chk_rec_rare_grouping", None) and self.chk_rec_rare_grouping.isChecked():
-            parts.append(f"group rare categorical values (min {self.spin_rare_min_freq.value():.2f})")
-
-        self.lbl_preprocess_recs.setText("Recommended preprocess: " + ", ".join(parts))
+        available_recs: List[str] = []
+        
+        # Check which recommendations are available
+        if recs.get("date_extract"):
+            available_recs.append("date/time features")
+            if getattr(self, "chk_rec_date_extract", None) and self.chk_rec_date_extract.isChecked():
+                parts.append("✓ Extract date/time features")
+        
+        if recs.get("text_extract"):
+            available_recs.append("text features")
+            if getattr(self, "chk_rec_text_extract", None) and self.chk_rec_text_extract.isChecked():
+                text_cols = self.le_text_feature_columns.text().strip() if getattr(self, "le_text_feature_columns", None) else ""
+                if text_cols:
+                    parts.append(f"✓ Text features from: {text_cols}")
+                else:
+                    parts.append("✓ Text feature extraction")
+        
+        if recs.get("rare_category_min_freq"):
+            available_recs.append("rare category grouping")
+            if getattr(self, "chk_rec_rare_grouping", None) and self.chk_rec_rare_grouping.isChecked():
+                parts.append(f"✓ Group rare categories (threshold: {self.spin_rare_min_freq.value():.1%})")
+        
+        # Build summary message
+        if parts:
+            summary = "✨ Recommended preprocessing enabled:\n  " + "\n  ".join(parts)
+        else:
+            summary = f"💡 Available recommendations: {', '.join(available_recs)}\nEnable toggles above to apply."
+        
+        self.lbl_preprocess_recs.setText(summary)
 
     def _get_preferences(self) -> Dict[str, Any]:
         prefs: Dict[str, Any] = {}

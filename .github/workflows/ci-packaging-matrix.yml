@@ -1,0 +1,108 @@
+name: CI - Packaging Matrix (Windows/Linux)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  packaging-matrix:
+    name: Package on ${{ matrix.os }} (Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy<2 pandas<2.2 scikit-learn==1.5.2 "PySide6>=6.6,<6.7" pyinstaller pyyaml opencv-python-headless<4.11 joblib mlflow<3.0
+      
+      - name: Run packaging precheck
+        run: |
+          python scripts/check_packaging_env.py
+      
+      - name: Display NumPy version
+        run: |
+          python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
+      
+      - name: Build PyInstaller on Windows
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+      
+      - name: Build PyInstaller on Linux
+        if: runner.os == 'Linux'
+        run: |
+          pyinstaller --noconfirm --clean ml_orchestrator_demo_linux.spec || pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
+      
+      - name: Verify executable exists on Windows
+        if: runner.os == 'Windows'
+        run: |
+          if ((Test-Path "dist\MLOrchestratorDemo\MLOrchestratorDemo.exe")) {
+            Write-Host "✓ Executable created successfully"
+            $size = (Get-Item "dist\MLOrchestratorDemo\MLOrchestratorDemo.exe").Length
+            Write-Host "  Size: $($size / 1MB) MB"
+          } else {
+            Write-Host "✗ Executable not found"
+            exit 1
+          }
+      
+      - name: Verify executable exists on Linux
+        if: runner.os == 'Linux'
+        run: |
+          if [ -f "dist/MLOrchestratorDemo/MLOrchestratorDemo" ]; then
+            echo "✓ Executable created successfully"
+            ls -lh dist/MLOrchestratorDemo/MLOrchestratorDemo
+          else
+            echo "✗ Executable not found"
+            exit 1
+          fi
+      
+      - name: Smoke test - Run basic help (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: |
+          "dist\MLOrchestratorDemo\MLOrchestratorDemo.exe" --help 2>&1 || Write-Host "Exe ran (or expected GUI launch)"
+      
+      - name: Smoke test - Run basic help (Linux)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          ./dist/MLOrchestratorDemo/MLOrchestratorDemo --help 2>&1 || echo "Exe ran (or expected GUI launch)"
+      
+      - name: Upload dist artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist/
+          retention-days: 5
+
+  summary:
+    name: Packaging Summary
+    runs-on: ubuntu-latest
+    needs: packaging-matrix
+    if: always()
+    steps:
+      - name: Check packaging status
+        run: |
+          if [ "${{ needs.packaging-matrix.result }}" == "success" ]; then
+            echo "✓ Packaging successful on all platforms"
+            exit 0
+          else
+            echo "⚠ Packaging had issues - check job logs"
+            exit 1
+          fi
