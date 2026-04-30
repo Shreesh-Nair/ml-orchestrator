@@ -1,0 +1,83 @@
+name: Release Packaging
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Version to embed in the installer"
+        required: false
+        type: string
+
+jobs:
+  package-release:
+    name: Build and verify release artifact
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install packaging dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy<2" "pandas<2.2" "scikit-learn==1.5.2" "PySide6>=6.6,<6.7" pyinstaller pyyaml "opencv-python-headless<4.11" joblib "mlflow<3.0"
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Packaging precheck
+        shell: powershell
+        run: |
+          python scripts\check_packaging_env.py
+
+      - name: Build demo executable
+        shell: powershell
+        run: |
+          .\scripts\build_demo.ps1
+
+      - name: Determine release version
+        id: version
+        shell: powershell
+        run: |
+          $version = "${{ github.event.inputs.app_version }}"
+          if (-not $version) {
+            $version = "${{ github.event.release.tag_name }}"
+          }
+          $version = $version.Trim()
+          if ($version.StartsWith('v')) {
+            $version = $version.Substring(1)
+          }
+          if (-not $version) {
+            $version = '0.1.0'
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "app_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Using app version: $version"
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          .\scripts\build_installer.ps1 -AppVersion $env:APP_VERSION
+
+      - name: Verify release artifacts
+        shell: powershell
+        run: |
+          .\scripts\verify_release_artifact.ps1
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MLOrchestratorDemo-Release-${{ steps.version.outputs.app_version }}
+          path: |
+            dist/installer/MLOrchestratorDemoSetup.exe
+            dist/installer/MLOrchestratorDemoSetup.exe.sha256.txt
+          retention-days: 30
