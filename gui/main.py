@@ -93,6 +93,7 @@ TASK_CONFIG: Dict[str, Dict[str, Any]] = {
         "models": [
             ("Random Forest", "classification_rf"),
             ("Logistic Regression", "classification_logreg"),
+            ("Gradient Boosting (XGBoost)", "classification_xgboost"),
         ],
         "require_binary_target": True,
     },
@@ -101,6 +102,9 @@ TASK_CONFIG: Dict[str, Dict[str, Any]] = {
         "models": [
             ("Random Forest Regressor", "regression_rf"),
             ("Linear Regression", "regression_linear"),
+            ("Ridge Regression", "regression_ridge"),
+            ("Lasso Regression", "regression_lasso"),
+            ("ElasticNet Regression", "regression_elasticnet"),
         ],
         "require_binary_target": False,
     },
@@ -108,6 +112,8 @@ TASK_CONFIG: Dict[str, Dict[str, Any]] = {
         "label": "Anomaly Detection",
         "models": [
             ("Isolation Forest", "anomaly_isolation_forest"),
+            ("Local Outlier Factor (LOF)", "anomaly_lof"),
+            ("One-Class SVM", "anomaly_ocsvm"),
         ],
         "require_binary_target": True,
     },

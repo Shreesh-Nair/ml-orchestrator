@@ -114,28 +114,44 @@ Enable users to get predictions from trained models in practical ways.
 Expand model variety and add basic explainability.
 
 ### Classification Options
-- [x] Logistic Regression
-- [x] Random Forest
-- [ ] Gradient Boosting (e.g., XGBoost, LightGBM)
-- **Status**: 2 of 3 implemented
 
 ### Regression Options
-- [x] Linear Regression
-- [x] Random Forest Regressor
-- [ ] ElasticNet / Ridge / Lasso (regularized options)
-- **Status**: 2 of 3 implemented
+
+### Classification Options UPDATED
+- [x] Logistic Regression
+- [x] Random Forest
+- [x] Gradient Boosting (XGBoost)
+- **Status**: 3 of 3 implemented ✅
+
+### Regression Options
 
 ### Anomaly Detection Options
-- [x] Isolation Forest (core algorithm)
-- [ ] Local Outlier Factor (LOF) in advanced mode
-- [ ] One-Class SVM in advanced mode
-- **Status**: 1 of 3 implemented
+
+### Regression Options UPDATED
+- [x] Linear Regression
+- [x] Random Forest Regressor
+- [x] Ridge / Lasso / ElasticNet (regularized options)
+- **Status**: 3 of 3 implemented ✅
+
+### Anomaly Detection Options
 
 ### Explainability Basics
-- [ ] Feature importance (permutation or built-in)
+
+### Anomaly Detection Options UPDATED
+- [x] Isolation Forest (core algorithm)
+- [x] Local Outlier Factor (LOF)
+- [x] One-Class SVM
+- **Status**: 3 of 3 implemented ✅
+
+### Explainability Basics
+
+### Task Templates
+
+### Explainability Basics UPDATED
+- [x] Feature importance (built-in, coefficient, and permutation)
 - [ ] Feature contribution for single predictions
 - [ ] Simple "why" explanations
-- **Status**: Not yet implemented
+- **Status**: 1 of 3 implemented
 
 ### Task Templates
 - [ ] Churn prediction template
@@ -145,7 +161,7 @@ Expand model variety and add basic explainability.
 - **Status**: Not yet implemented (have example YAMLs but not GUI templates)
 
 ### Phase 3 Overall Status
-🟡 **PARTIALLY COMPLETE** (~50%) - Core algorithms present; missing Gradient Boosting, regularized regression, LOF/SVM, explainability, and task templates.
+✅ **SUBSTANTIALLY COMPLETE** (~80%) - All core classification, regression, and anomaly algorithms fully implemented. Only missing task templates and single-prediction explanations.
 
 ---
 
@@ -436,12 +452,12 @@ All these conditions must be true for a v1.0 final release:
 
 # Current Phase Summary
 
-**As of now: We are in Phase 2 (Prediction Workflows), transitioning to Phase 3 (Model Options).**
+**As of now: We are COMPLETING Phase 3 (Tabular Model Options), ready for Phase 4 (Hyperparameter Tuning).**
 
 - ✅ **Phase 0**: Guardrails not formalized but vision clear
 - ✅ **Phase 1**: Core reliability 100% complete
 - ✅ **Phase 2**: Prediction workflows 100% complete
-- 🟡 **Phase 3**: Tabular models ~50% (missing Gradient Boosting, regularized regression, LOF/SVM, explainability)
+- ✅ **Phase 3**: Tabular models ~80% (all core algorithms implemented; missing task templates and "why" explanations)
 - 🔴 **Phase 4**: Hyperparameter tuning not started
 - 🟡 **Phase 5**: Data augmentation ~40% (data quality complete; preprocessing recipes partial; imbalance/augmentation missing)
 - 🔴 **Phase 6**: Vision workflows not started
