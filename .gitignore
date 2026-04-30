@@ -21,6 +21,9 @@ htmlcov/
 .pytest_*.xml
 pytest-report.xml
 junit*.xml
+test_output.txt
+test_results_final.txt
+test_full_results.txt
 
 # Build artifacts
 build/
@@ -62,6 +65,7 @@ Thumbs.db
 # PyInstaller build artifacts (keep build/ in .gitignore)
 spec.d/
 onefile_*.txt
+dist/installer/*.sha256.txt
 
 # Poetry lock files (optional - typically committed)
 # poetry.lock
