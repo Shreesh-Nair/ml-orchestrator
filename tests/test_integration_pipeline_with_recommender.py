@@ -41,6 +41,7 @@ def test_housing_regression_with_recommender():
     preprocess_stage_params = {
         "impute_missing": True,
         "scale_numeric": True,
+        "task_type": "regression",  # Required for regression tasks
     }
     preprocess_stage_params.update(preprocess_params)
     

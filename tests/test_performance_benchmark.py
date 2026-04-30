@@ -50,6 +50,7 @@ def test_preprocess_performance_large_dataset():
         name="preprocess",
         type="tabular_preprocess",
         params={
+            "task_type": "regression",
             "impute_missing": True,
             "scale_numeric": True,
             "date_extract": False,
@@ -68,8 +69,8 @@ def test_preprocess_performance_large_dataset():
     result = handler.run(context)
     elapsed = time.time() - start
     
-    assert "df_preprocessed" in result
-    assert result["df_preprocessed"].shape[0] > 0
+    assert "X_train" in result
+    assert result["X_train"].shape[0] > 0
     assert elapsed < 5.0, f"Preprocessing took {elapsed:.2f}s, expected < 5s"
     
     print(f"\n✓ Preprocessing benchmark: {elapsed:.3f}s for {df.shape} dataset")
@@ -83,16 +84,38 @@ def test_training_performance_medium_dataset():
     Expected time: < 3 seconds
     Threshold: 10 seconds (3.3x safety margin)
     """
-    df, target_col = _create_large_dataframe(rows=1000, cols=15)
+    import numpy as np
     
-    # Simulate preprocessing output (already transformed)
-    X = df.drop(columns=[target_col])
-    y = df[target_col]
+    # Create numeric-only dataset
+    df = pd.DataFrame(
+        np.random.randn(1000, 14),
+        columns=[f"feature_{i}" for i in range(14)]
+    )
+    df["target"] = np.random.randn(1000)
+    target_col = "target"
     
-    # Create a training stage config
+    # Get preprocessed data via TabularPreprocessHandler
+    stage = Stage(
+        name="preprocess",
+        type="tabular_preprocess",
+        params={
+            "task_type": "regression",
+            "impute_missing": True,
+            "scale_numeric": True,
+        }
+    )
+    
+    preprocess_handler = TabularPreprocessHandler(stage)
+    context = {
+        "df": df,
+        "target_column": target_col,
+    }
+    preprocess_result = preprocess_handler.run(context)
+    
+    # Now train with preprocessed data
     stage = Stage(
         name="train",
-        type="regression",
+        type="regression_rf",
         params={
             "n_estimators": 50,
             "max_depth": 10,
@@ -100,21 +123,23 @@ def test_training_performance_medium_dataset():
     )
     
     handler = RandomForestRegressionHandler(stage)
-    context = {
-        "X_train": X,
-        "y_train": y,
+    train_context = {
+        "X_train": preprocess_result["X_train"],
+        "y_train": preprocess_result["y_train"],
+        "X_test": preprocess_result["X_test"],
+        "y_test": preprocess_result["y_test"],
     }
     
     # Measure training time
     start = time.time()
-    result = handler.run(context)
+    result = handler.run(train_context)
     elapsed = time.time() - start
     
     assert "model" in result
     assert result["model"] is not None
     assert elapsed < 10.0, f"Training took {elapsed:.2f}s, expected < 10s"
     
-    print(f"\n✓ Training benchmark: {elapsed:.3f}s for {X.shape} dataset")
+    print(f"\n✓ Training benchmark: {elapsed:.3f}s for {train_context['X_train'].shape} dataset")
 
 
 @pytest.mark.benchmark
@@ -149,14 +174,17 @@ def test_full_pipeline_performance():
                 "name": "preprocess",
                 "type": "tabular_preprocess",
                 "params": {
+                    "task_type": "regression",
+                    "target_column": target_col,
                     "impute_missing": True,
                     "scale_numeric": True,
                 },
             },
             {
                 "name": "train",
-                "type": "regression",
+                "type": "regression_rf",
                 "params": {
+                    "target_column": target_col,
                     "n_estimators": 10,
                     "max_depth": 5,
                 },
