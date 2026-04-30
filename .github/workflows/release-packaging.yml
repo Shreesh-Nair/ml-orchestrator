@@ -39,11 +39,6 @@ jobs:
         run: |
           python scripts\check_packaging_env.py
 
-      - name: Build demo executable
-        shell: powershell
-        run: |
-          .\scripts\build_demo.ps1
-
       - name: Determine release version
         id: version
         shell: powershell
@@ -66,12 +61,7 @@ jobs:
       - name: Build installer
         shell: powershell
         run: |
-          .\scripts\build_installer.ps1 -AppVersion $env:APP_VERSION
-
-      - name: Verify release artifacts
-        shell: powershell
-        run: |
-          .\scripts\verify_release_artifact.ps1
+          .\scripts\build_release.ps1 -AppVersion $env:APP_VERSION
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
