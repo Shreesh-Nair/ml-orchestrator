@@ -4,6 +4,19 @@ ML Orchestrator is a no-code desktop ML app for people who are not into coding o
 
 The long-term goal is a standalone app experience like VLC or WinRAR: install once, open data, run ML workflows, and get usable outputs with clear guidance.
 
+## 📋 Development Status
+
+**Current Phase: Phase 2 (Prediction Workflows) → Transitioning to Phase 3 (Tabular Model Options)**
+
+See [PHASES.md](PHASES.md) for the complete 10-phase roadmap, detailed feature checklist, and progress tracking.
+
+**Quick Status**:
+- ✅ Phase 1: Core reliability (validation, errors, sessions) — 100%
+- ✅ Phase 2: Prediction workflows (manual + batch) — 100%
+- 🟡 Phase 3: Model options (classification, regression, anomaly) — ~50% (missing Gradient Boosting, regularized regression, LOF/SVM, explainability)
+- 🔴 Phase 4-6: Hyperparameter tuning, data augmentation, vision workflows — Not started
+- ✅ Phase 9: Testing and quality gates — 100% (53+ tests passing)
+
 ## Product Vision
 
 - No-code first: users should complete common ML tasks without writing code.
