@@ -184,6 +184,13 @@ Let power users tune models without CLI exposure.
 - [x] Quick syntax checks passed (`python -m py_compile` across repo)
 - [x] Changes committed: `0a61719` — "Phase 4: add hyperparameter tuning MVP — UI, YAML wiring, and tuner handler"
 
+### Checkpoint (2026-05-01 - Tests)
+- [x] Created `tests/test_hyperparameter_tuner.py` with 6 comprehensive unit tests
+- [x] Tests cover: quick mode, tune mode, n_trials parameter, regression task, error handling, YAML integration
+- [x] Fixed circular import in HyperparameterTunerHandler (deferred import of `get_handler_for_stage`)
+- [x] 3 out of 6 tests verified passing; 2 tests fixed (regression column name, exception type)
+- [x] Next: commit tests + run full suite, then implement search strategy improvements
+
 ---
 
 ## Phase 5: Data Handling and Augmentation (Important)

@@ -8,7 +8,6 @@ import time
 import numpy as np
 
 from handlers.base import BaseHandler
-from core.handler_registry import get_handler_for_stage
 
 
 class HyperparameterTunerHandler(BaseHandler):
@@ -18,6 +17,8 @@ class HyperparameterTunerHandler(BaseHandler):
     """
 
     def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        from core.handler_registry import get_handler_for_stage
+        
         params = self.stage.params or {}
         model_type = params.get("model_type")
         if not model_type:
