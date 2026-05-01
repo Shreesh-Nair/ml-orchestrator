@@ -6,14 +6,19 @@ import random
 import time
 
 import numpy as np
+from sklearn.model_selection import RandomizedSearchCV
 
 from handlers.base import BaseHandler
 
 
 class HyperparameterTunerHandler(BaseHandler):
-    """Simple hyperparameter tuner that delegates training to existing model handlers.
-
-    It performs randomized sampling over small predefined search spaces for known model types.
+    """Hyperparameter tuner using randomized search over predefined spaces.
+    
+    Features:
+    - Randomized search over sensible parameter ranges for each model type
+    - Baseline model comparison (default params vs. tuned)
+    - Early stopping (stop if no improvement in N trials)
+    - Tracks training time and provides a comparison report
     """
 
     def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -28,21 +33,41 @@ class HyperparameterTunerHandler(BaseHandler):
         max_time = int(params.get("max_time_minutes", 0))
         random_state = int(params.get("random_state", 42))
         random.seed(random_state)
+        np.random.seed(random_state)
 
-        # Very small search spaces for MVP
+        # Expanded search spaces for better tuning
         search_spaces = {
             "classification_rf": {
-                "n_estimators": [50, 100, 200],
-                "max_depth": [None, 5, 10],
+                "n_estimators": [50, 100, 150, 200, 300],
+                "max_depth": [5, 7, 10, 15, None],
+                "min_samples_split": [2, 5, 10],
+                "min_samples_leaf": [1, 2, 4],
             },
             "classification_xgboost": {
-                "n_estimators": [50, 100, 200],
-                "max_depth": [3, 6, 10],
-                "learning_rate": [0.01, 0.05, 0.1],
+                "n_estimators": [50, 100, 150, 200],
+                "max_depth": [3, 5, 7, 10],
+                "learning_rate": [0.01, 0.05, 0.1, 0.2],
+                "subsample": [0.7, 0.8, 0.9, 1.0],
             },
-            "classification_logreg": {"C": [0.01, 0.1, 1.0, 10.0]},
-            "regression_rf": {"n_estimators": [50, 100, 200], "max_depth": [None, 5, 10]},
-            "regression_linear": {"fit_intercept": [True, False]},
+            "classification_logreg": {
+                "C": [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+                "max_iter": [100, 200, 500],
+            },
+            "regression_rf": {
+                "n_estimators": [50, 100, 150, 200],
+                "max_depth": [5, 7, 10, 15, None],
+                "min_samples_split": [2, 5, 10],
+            },
+            "regression_linear": {
+                "fit_intercept": [True, False],
+            },
+            "regression_ridge": {
+                "alpha": [0.001, 0.01, 0.1, 1.0, 10.0],
+            },
+            "regression_lasso": {
+                "alpha": [0.001, 0.01, 0.1, 1.0, 10.0],
+                "max_iter": [1000, 2000],
+            },
         }
 
         space = search_spaces.get(model_type, {})
@@ -53,53 +78,102 @@ class HyperparameterTunerHandler(BaseHandler):
                 out[k] = random.choice(choices)
             return out
 
-        best_score = -np.inf
-        best_context = None
-        start = time.time()
+        # Step 1: Train baseline model (default params)
+        baseline_context = self._train_model(context, model_type, {}, params, random_state)
+        baseline_metrics = baseline_context.get("metrics", {})
+        baseline_score = self._extract_score(baseline_metrics, params.get("task_type", "classification"))
 
-        for i in range(max(1, n_trials)):
+        # Step 2: Run hyperparameter search with early stopping
+        best_score = baseline_score
+        best_context = baseline_context
+        best_params = {}
+        trials_without_improvement = 0
+        early_stop_patience = max(2, n_trials // 5)  # Stop if no improvement in N trials
+        start = time.time()
+        trial_num = 0
+
+        while trial_num < n_trials:
             if max_time and (time.time() - start) > (max_time * 60):
                 break
 
+            # Early stopping
+            if trials_without_improvement >= early_stop_patience:
+                print(f"[hyperparameter_tune] Early stopping: no improvement in {early_stop_patience} trials")
+                break
+
             sampled = sample_params(space) if space else {}
-
-            # Build a lightweight fake stage for the underlying model trainer
-            class FakeStage:
-                pass
-
-            fake_stage = FakeStage()
-            fake_stage.type = params.get("model_type")
-            fake_stage.params = {**(params.get("model_params", {}) or {}), **sampled}
-            fake_stage.models = []
-
-            handler_cls = get_handler_for_stage(fake_stage.type)
-            handler = handler_cls(fake_stage)
-
-            # Use a deep copy of context so failed runs don't mutate the main context
-            trial_context = copy.deepcopy(context)
-            try:
-                trial_result = handler.run(trial_context)
-            except Exception as e:
-                # Skip failing configurations
-                print(f"[hyperparameter_tune] trial {i} failed: {e}")
+            trial_context = self._train_model(context, model_type, sampled, params, random_state)
+            
+            if trial_context is None:
+                trials_without_improvement += 1
+                trial_num += 1
                 continue
 
-            metrics = trial_result.get("metrics") or {}
-            # Choose primary metric based on task
-            task = params.get("task_type", "classification")
-            if task == "regression":
-                score = -float(metrics.get("rmse", 0.0))
-            else:
-                score = float(metrics.get("f1", metrics.get("roc_auc", metrics.get("accuracy", 0.0))))
+            metrics = trial_context.get("metrics") or {}
+            score = self._extract_score(metrics, params.get("task_type", "classification"))
 
             if score > best_score:
                 best_score = score
-                best_context = trial_result
+                best_context = trial_context
+                best_params = sampled
+                trials_without_improvement = 0
+                print(f"[hyperparameter_tune] Trial {trial_num}: NEW BEST score={score:.4f}, params={sampled}")
+            else:
+                trials_without_improvement += 1
 
-        if best_context is None:
-            raise RuntimeError("Hyperparameter tuning found no successful candidate")
+            trial_num += 1
 
-        # Winner's artifacts become the run context
+        # Step 3: Prepare comparison report
+        elapsed_time = time.time() - start
+        comparison_report = {
+            "baseline_score": float(baseline_score),
+            "best_score": float(best_score),
+            "improvement_pct": float((best_score - baseline_score) / abs(baseline_score) * 100) if baseline_score != 0 else 0.0,
+            "best_params": best_params,
+            "trials_run": trial_num,
+            "elapsed_seconds": float(elapsed_time),
+            "baseline_metrics": baseline_metrics,
+            "best_metrics": best_context.get("metrics", {}),
+        }
+
+        # Update context with best model
         context.update(best_context)
-        context["tuning_summary"] = {"best_score": float(best_score)}
+        context["tuning_summary"] = comparison_report
+        context["baseline_model"] = baseline_context.get("model")
+        
         return context
+
+    def _train_model(
+        self, context: Dict[str, Any], model_type: str, 
+        sampled_params: Dict[str, Any], stage_params: Dict[str, Any],
+        random_state: int
+    ) -> Dict[str, Any] | None:
+        """Train a model with given parameters. Returns context or None on failure."""
+        from core.handler_registry import get_handler_for_stage
+
+        class FakeStage:
+            pass
+
+        fake_stage = FakeStage()
+        fake_stage.type = model_type
+        fake_stage.params = {**(stage_params.get("model_params", {}) or {}), **sampled_params}
+        fake_stage.models = []
+
+        try:
+            handler_cls = get_handler_for_stage(fake_stage.type)
+            handler = handler_cls(fake_stage)
+            trial_context = copy.deepcopy(context)
+            trial_result = handler.run(trial_context)
+            return trial_result
+        except Exception as e:
+            print(f"[hyperparameter_tune] Model training failed: {e}")
+            return None
+
+    def _extract_score(self, metrics: Dict[str, Any], task_type: str) -> float:
+        """Extract the primary metric for scoring based on task type."""
+        if task_type == "regression":
+            return -float(metrics.get("rmse", 0.0))
+        elif task_type == "anomaly":
+            return float(metrics.get("roc_auc", metrics.get("accuracy", 0.0)))
+        else:  # classification
+            return float(metrics.get("f1", metrics.get("roc_auc", metrics.get("accuracy", 0.0))))

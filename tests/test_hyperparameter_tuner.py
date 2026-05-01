@@ -106,8 +106,13 @@ class TestHyperparameterTuner:
         assert "model" in context
         assert "metrics" in context
         assert "tuning_summary" in context
-        assert "best_score" in context["tuning_summary"]
-        print(f"Tune mode best score: {context['tuning_summary']['best_score']:.4f}")
+        summary = context["tuning_summary"]
+        assert "best_score" in summary
+        assert "baseline_score" in summary
+        assert "improvement_pct" in summary
+        assert "trials_run" in summary
+        assert "elapsed_seconds" in summary
+        print(f"Tune mode: baseline={summary['baseline_score']:.4f}, best={summary['best_score']:.4f}, improvement={summary['improvement_pct']:.2f}%")
 
     def test_tuner_respects_n_trials(self, tmp_path):
         """Test that tuner respects the n_trials parameter."""
@@ -289,6 +294,65 @@ stages:
         assert "model" in context
         assert "tuning_summary" in context
         print("YAML-based tuner test: PASS")
+
+
+    def test_tuner_comparison_report(self, tmp_path):
+        """Test that tuner generates a proper baseline vs best comparison report."""
+        pipeline_dict = {
+            "pipeline_name": "test_comparison",
+            "stages": [
+                {
+                    "name": "load_data",
+                    "type": "csv_loader",
+                    "params": {
+                        "source": str(Path(__file__).parent.parent / "data" / "titanic.csv"),
+                        "target_column": "Survived",
+                    },
+                },
+                {
+                    "name": "preprocess",
+                    "type": "tabular_preprocess",
+                    "params": {
+                        "target_column": "Survived",
+                        "task_type": "classification",
+                        "require_binary_target": True,
+                        "scale_numeric": True,
+                        "encode_categoricals": True,
+                        "test_size": 0.2,
+                        "random_state": 42,
+                    },
+                },
+                {
+                    "name": "hyperparameter_tune",
+                    "type": "hyperparameter_tune",
+                    "params": {
+                        "model_type": "classification_rf",
+                        "task_type": "classification",
+                        "n_trials": 4,
+                        "max_time_minutes": 0,
+                        "random_state": 42,
+                    },
+                },
+            ],
+        }
+
+        yaml_file = tmp_path / "test_comparison.yml"
+        yaml_file.write_text(yaml.dump(pipeline_dict))
+
+        context = run_pipeline(str(yaml_file))
+        assert context is not None
+        
+        summary = context["tuning_summary"]
+        assert "baseline_score" in summary
+        assert "best_score" in summary
+        assert "improvement_pct" in summary
+        assert "trials_run" in summary
+        assert "elapsed_seconds" in summary
+        assert "best_params" in summary
+        assert "baseline_metrics" in summary
+        assert "best_metrics" in summary
+        
+        print(f"Comparison report: baseline={summary['baseline_score']:.4f}, best={summary['best_score']:.4f}, improvement={summary['improvement_pct']:.2f}%")
 
 
 if __name__ == "__main__":
