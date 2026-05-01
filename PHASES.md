@@ -174,7 +174,7 @@ Let power users tune models without CLI exposure.
 - **Status**: Not implemented
 
 ### Phase 4 Overall Status
-🟡 **IN PROGRESS** (~30%) - Training mode UI, YAML wiring, and an MVP `HyperparameterTunerHandler` are implemented. Next: add robust search strategies, evaluation reporting, early stopping, and tests.
+🟡 **IN PROGRESS** (~60%) - Training mode UI, YAML wiring, MVP tuner, and comparison reporting implemented. Remaining: result visualization in GUI, output integration, and optional advanced features (Optuna integration, cross-validation strategy selection).
 
 ### Checkpoint (2026-05-01)
 - [x] UI controls added in `gui/main.py` (training mode, trials, max time)
@@ -190,6 +190,16 @@ Let power users tune models without CLI exposure.
 - [x] Fixed circular import in HyperparameterTunerHandler (deferred import of `get_handler_for_stage`)
 - [x] 3 out of 6 tests verified passing; 2 tests fixed (regression column name, exception type)
 - [x] Next: commit tests + run full suite, then implement search strategy improvements
+
+### Checkpoint (2026-05-01 - Enhanced Tuner)
+- [x] Expanded hyperparameter search spaces for all model types (RF, XGBoost, LogReg, Ridge, Lasso, Linear)
+- [x] Implemented baseline model training (default parameters for comparison)
+- [x] Added early stopping logic (stop after N trials without improvement)
+- [x] Built comprehensive comparison report: baseline vs. best, improvement %, elapsed time, metrics side-by-side
+- [x] Added helper methods: `_train_model()`, `_extract_score()` for cleaner architecture
+- [x] Created new test `test_tuner_comparison_report()` to validate reporting feature
+- [x] Changes committed: `e642b16` — "Phase 4: enhance hyperparameter tuner with baseline comparison, early stopping, and expanded search spaces"
+- [x] Phase 4 progress: ~60% (UI, YAML, MVP tuner, comparison reporting complete; remaining: visualization/UI display of results, output integration)
 
 ---
 
