@@ -176,6 +176,14 @@ Let power users tune models without CLI exposure.
 ### Phase 4 Overall Status
 🟡 **IN PROGRESS** (~30%) - Training mode UI, YAML wiring, and an MVP `HyperparameterTunerHandler` are implemented. Next: add robust search strategies, evaluation reporting, early stopping, and tests.
 
+### Checkpoint (2026-05-01)
+- [x] UI controls added in `gui/main.py` (training mode, trials, max time)
+- [x] `_write_generated_yaml()` wired to emit `hyperparameter_tune` stage when tuning is selected
+- [x] `HyperparameterTunerHandler` implemented (MVP randomized trials delegating to existing model handlers)
+- [x] Handler registered in `core/handler_registry.py`
+- [x] Quick syntax checks passed (`python -m py_compile` across repo)
+- [x] Changes committed: `0a61719` — "Phase 4: add hyperparameter tuning MVP — UI, YAML wiring, and tuner handler"
+
 ---
 
 ## Phase 5: Data Handling and Augmentation (Important)
