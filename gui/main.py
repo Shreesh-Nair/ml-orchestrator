@@ -1341,10 +1341,37 @@ class MainWindow(QMainWindow):
         ordered_keys.extend([key for key in metrics.keys() if key not in ordered_keys])
 
         self.metrics_table.setRowCount(0)
-        for row, key in enumerate(ordered_keys):
+        row = 0
+        for key in ordered_keys:
             self.metrics_table.insertRow(row)
             self.metrics_table.setItem(row, 0, QTableWidgetItem(key))
             self.metrics_table.setItem(row, 1, QTableWidgetItem(self._format_metric(metrics[key])))
+            row += 1
+
+        # Display tuning summary if hyperparameter tuning was applied
+        tuning_summary = context.get("tuning_summary")
+        if tuning_summary:
+            # Add separator and tuning summary section
+            self.metrics_table.insertRow(row)
+            sep_item = QTableWidgetItem("─── Tuning Results ───")
+            sep_item.setForeground(np.array([100, 100, 100]))  # Gray text
+            self.metrics_table.setItem(row, 0, sep_item)
+            row += 1
+
+            tuning_items = [
+                ("baseline_score", "Baseline Score"),
+                ("best_score", "Best Score"),
+                ("improvement_pct", "Improvement (%)"),
+                ("trials_run", "Trials Run"),
+                ("elapsed_seconds", "Time (seconds)"),
+            ]
+
+            for key, label in tuning_items:
+                if key in tuning_summary:
+                    self.metrics_table.insertRow(row)
+                    self.metrics_table.setItem(row, 0, QTableWidgetItem(label))
+                    self.metrics_table.setItem(row, 1, QTableWidgetItem(self._format_metric(tuning_summary[key])))
+                    row += 1
 
     def _update_visualizations(self, context: Dict[str, Any]) -> None:
         self.viz_tabs.clear()
