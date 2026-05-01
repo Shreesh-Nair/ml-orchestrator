@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 import copy
+import pickle
 import random
 import time
 
 import numpy as np
-from sklearn.model_selection import RandomizedSearchCV
 
 from handlers.base import BaseHandler
 
@@ -125,6 +125,22 @@ class HyperparameterTunerHandler(BaseHandler):
 
         # Step 3: Prepare comparison report
         elapsed_time = time.time() - start
+        baseline_model_size_bytes = self._estimate_model_size_bytes(baseline_context.get("model"))
+        best_model_size_bytes = self._estimate_model_size_bytes(best_context.get("model"))
+        size_delta_bytes = None
+        size_change_pct = None
+        if baseline_model_size_bytes is not None and best_model_size_bytes is not None:
+            size_delta_bytes = best_model_size_bytes - baseline_model_size_bytes
+            if baseline_model_size_bytes != 0:
+                size_change_pct = float(size_delta_bytes / baseline_model_size_bytes * 100)
+
+        recommendation = self._build_recommendation(
+            baseline_score=baseline_score,
+            best_score=best_score,
+            size_change_pct=size_change_pct,
+            elapsed_seconds=elapsed_time,
+        )
+
         comparison_report = {
             "baseline_score": float(baseline_score),
             "best_score": float(best_score),
@@ -134,6 +150,11 @@ class HyperparameterTunerHandler(BaseHandler):
             "elapsed_seconds": float(elapsed_time),
             "baseline_metrics": baseline_metrics,
             "best_metrics": best_context.get("metrics", {}),
+            "baseline_model_size_bytes": baseline_model_size_bytes,
+            "best_model_size_bytes": best_model_size_bytes,
+            "size_delta_bytes": size_delta_bytes,
+            "size_change_pct": size_change_pct,
+            "recommendation": recommendation,
         }
 
         # Update context with best model
@@ -177,3 +198,34 @@ class HyperparameterTunerHandler(BaseHandler):
             return float(metrics.get("roc_auc", metrics.get("accuracy", 0.0)))
         else:  # classification
             return float(metrics.get("f1", metrics.get("roc_auc", metrics.get("accuracy", 0.0))))
+
+    def _estimate_model_size_bytes(self, model: Any) -> int | None:
+        """Estimate serialized model size in bytes."""
+        if model is None:
+            return None
+
+        try:
+            return len(pickle.dumps(model))
+        except Exception as exc:
+            print(f"[hyperparameter_tune] Model size estimation failed: {exc}")
+            return None
+
+    def _build_recommendation(
+        self,
+        baseline_score: float,
+        best_score: float,
+        size_change_pct: float | None,
+        elapsed_seconds: float,
+    ) -> str:
+        """Build a simple production recommendation from tuning results."""
+        improvement_pct = 0.0
+        if baseline_score != 0:
+            improvement_pct = float((best_score - baseline_score) / abs(baseline_score) * 100)
+
+        if best_score <= baseline_score:
+            return "Keep the baseline model; tuning did not improve the selected metric."
+
+        if improvement_pct >= 5.0 and (size_change_pct is None or size_change_pct <= 25.0) and elapsed_seconds <= 600:
+            return "Recommended for production after standard validation checks."
+
+        return "Promising candidate; review metric gain, runtime, and model size before production."

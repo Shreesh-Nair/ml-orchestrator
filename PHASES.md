@@ -169,9 +169,9 @@ Let power users tune models without CLI exposure.
 ### Comparison Report
 - [x] Baseline vs tuned model metrics (side-by-side in comparison report dict)
 - [x] Training time comparison (elapsed_seconds in report)
-- [ ] Model size comparison (optional enhancement)
-- [ ] Recommendation for production use (optional enhancement)
-- **Status**: Core metrics implemented; advanced features optional
+- [x] Model size comparison (serialized size in bytes)
+- [x] Recommendation for production use (rule-based summary)
+- **Status**: Core and advanced comparison fields implemented
 
 ### Phase 4 Overall Status
 🟡 **IN PROGRESS** (~70%) - Complete hyperparameter tuning with GUI integration: three training modes, expanded search spaces, baseline comparison, early stopping, and results display in metrics table. Remaining: cross-validation strategy UI, optional Optuna Bayesian search, and final polish.
@@ -210,8 +210,17 @@ Let power users tune models without CLI exposure.
 - [x] Changes committed: `[NEW_HASH]` — "Phase 4: add validation strategy UI (random vs stratified split selection)"
 - [x] Phase 4 progress: ~85% (UI controls, YAML wiring, enhanced tuner, comparison reporting, GUI display, and validation strategy selection complete; remaining: optional Optuna integration)
 
+### Checkpoint (2026-05-01 - Comparison Report Upgrade)
+- [x] Added serialized model size comparison to tuning summary (baseline vs best)
+- [x] Added rule-based production recommendation to tuning summary
+- [x] Displayed model size and recommendation fields in gui/main.py metrics table
+- [x] Extended comparison report test coverage to assert new fields
+- [x] All tests passing after changes
+- [x] Changes committed: `[NEW_HASH]` — "Phase 4: add model size and recommendation details to tuning comparison report"
+- [x] Phase 4 progress: ~92% (rich comparison report complete; only optional Optuna search remains)
+
 ### Phase 4 Overall Status
-🟡 **NEAR COMPLETE** (~85%) - Comprehensive hyperparameter tuning with GUI integration: three training modes, expanded search spaces, baseline comparison, early stopping, results display, and now validation strategy selection. Remaining: optional Optuna Bayesian search integration.
+🟡 **NEAR COMPLETE** (~92%) - Comprehensive hyperparameter tuning with GUI integration: three training modes, expanded search spaces, baseline comparison, early stopping, results display, validation strategy selection, and richer comparison reporting. Remaining: optional Optuna Bayesian search integration.
 
 ## Phase 5: Data Handling and Augmentation (Important)
 

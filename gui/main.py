@@ -1376,13 +1376,25 @@ class MainWindow(QMainWindow):
                 ("improvement_pct", "Improvement (%)"),
                 ("trials_run", "Trials Run"),
                 ("elapsed_seconds", "Time (seconds)"),
+                ("baseline_model_size_bytes", "Baseline Model Size (bytes)"),
+                ("best_model_size_bytes", "Best Model Size (bytes)"),
+                ("size_delta_bytes", "Size Delta (bytes)"),
+                ("size_change_pct", "Size Change (%)"),
+                ("recommendation", "Recommendation"),
             ]
 
             for key, label in tuning_items:
                 if key in tuning_summary:
                     self.metrics_table.insertRow(row)
                     self.metrics_table.setItem(row, 0, QTableWidgetItem(label))
-                    self.metrics_table.setItem(row, 1, QTableWidgetItem(self._format_metric(tuning_summary[key])))
+                    value = tuning_summary[key]
+                    if key == "recommendation":
+                        display_value = str(value)
+                    elif key.endswith("bytes") or key == "size_delta_bytes":
+                        display_value = "n/a" if value is None else f"{int(value):,} bytes"
+                    else:
+                        display_value = self._format_metric(value)
+                    self.metrics_table.setItem(row, 1, QTableWidgetItem(display_value))
                     row += 1
 
     def _update_visualizations(self, context: Dict[str, Any]) -> None:

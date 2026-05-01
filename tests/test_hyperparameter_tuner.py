@@ -351,8 +351,14 @@ stages:
         assert "best_params" in summary
         assert "baseline_metrics" in summary
         assert "best_metrics" in summary
+        assert "baseline_model_size_bytes" in summary
+        assert "best_model_size_bytes" in summary
+        assert "size_delta_bytes" in summary
+        assert "size_change_pct" in summary
+        assert "recommendation" in summary
         
         print(f"Comparison report: baseline={summary['baseline_score']:.4f}, best={summary['best_score']:.4f}, improvement={summary['improvement_pct']:.2f}%")
+        print(f"Recommendation: {summary['recommendation']}")
 
     def test_validation_strategy_random(self, tmp_path):
         """Test that random validation strategy works (no stratification)."""
