@@ -154,17 +154,17 @@ Expand model variety, add basic explainability, and provide starter templates fo
 Let power users tune models without CLI exposure.
 
 ### Three Training Modes
-- [ ] **Quick Mode**: Fast defaults, minimal controls, predictable runtime
-- [ ] **Tune Mode**: Selected key parameters only with sensible bounds
-- [ ] **Auto-Optimal Mode**: Time-budgeted search with progress and best-model selection
-- **Status**: Not implemented
+- [x] **Quick Mode**: Fast defaults, minimal controls, predictable runtime (UI + direct model run)
+- [x] **Tune Mode**: Selected key parameters only with sensible bounds (YAML wiring + tuner MVP)
+- [x] **Auto-Optimal Mode**: Time-budgeted search with progress and best-model selection (UI controls for budget)
+- **Status**: In progress — basic UI, YAML stage and MVP tuner implemented (approx. 30%)
 
 ### Training Budget Controls
-- [ ] Max runtime (in minutes)
-- [ ] Max trials / iterations
+- [x] Max runtime (in minutes) — UI control added
+- [x] Max trials / iterations — UI control added
 - [ ] Early stopping rules (e.g., no improvement in N trials)
 - [ ] Validation strategy (e.g., cross-fold selection)
-- **Status**: Not implemented
+- **Status**: Partially implemented (UI present; backend heuristics / early stopping planned)
 
 ### Comparison Report
 - [ ] Baseline vs tuned model metrics (side-by-side)
@@ -174,7 +174,7 @@ Let power users tune models without CLI exposure.
 - **Status**: Not implemented
 
 ### Phase 4 Overall Status
-🔴 **NOT STARTED** (0%) - No hyperparameter tuning UI or automation yet.
+🟡 **IN PROGRESS** (~30%) - Training mode UI, YAML wiring, and an MVP `HyperparameterTunerHandler` are implemented. Next: add robust search strategies, evaluation reporting, early stopping, and tests.
 
 ---
 
@@ -436,13 +436,13 @@ All these conditions must be true for a v1.0 final release:
 
 # Current Phase Summary
 
-**As of now: We are COMPLETING Phase 3 (Tabular Model Options), ready for Phase 4 (Hyperparameter Tuning).**
+**As of now: Phase 3 (Tabular Model Options) is complete and Phase 4 (Hyperparameter Tuning) is in-progress.**
 
 - ✅ **Phase 0**: Guardrails not formalized but vision clear
 - ✅ **Phase 1**: Core reliability 100% complete
 - ✅ **Phase 2**: Prediction workflows 100% complete
-- ✅ **Phase 3**: Tabular models ~80% (all core algorithms implemented; missing task templates and "why" explanations)
-- 🔴 **Phase 4**: Hyperparameter tuning not started
+- ✅ **Phase 3**: Tabular models complete (classification/regression/anomaly handlers and explainability basics implemented)
+- 🟡 **Phase 4**: Hyperparameter tuning in progress (~30%): UI, YAML wiring, and MVP tuner implemented
 - 🟡 **Phase 5**: Data augmentation ~40% (data quality complete; preprocessing recipes partial; imbalance/augmentation missing)
 - 🔴 **Phase 6**: Vision workflows not started
 - 🟡 **Phase 7**: UX polish ~35% (basic guidance present; wizard/model cards/visual outputs missing)

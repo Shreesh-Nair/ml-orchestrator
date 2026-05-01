@@ -6,15 +6,17 @@ The long-term goal is a standalone app experience like VLC or WinRAR: install on
 
 ## 📋 Development Status
 
-**Current Phase: Phase 2 (Prediction Workflows) → Transitioning to Phase 3 (Tabular Model Options)**
+**Current Phase: Phase 4 (Hyperparameter & Auto Optimization) — In Progress**
 
 See [PHASES.md](PHASES.md) for the complete 10-phase roadmap, detailed feature checklist, and progress tracking.
 
 **Quick Status**:
 - ✅ Phase 1: Core reliability (validation, errors, sessions) — 100%
 - ✅ Phase 2: Prediction workflows (manual + batch) — 100%
-- 🟡 Phase 3: Model options (classification, regression, anomaly) — ~50% (missing Gradient Boosting, regularized regression, LOF/SVM, explainability)
-- 🔴 Phase 4-6: Hyperparameter tuning, data augmentation, vision workflows — Not started
+- ✅ Phase 3: Model options (classification, regression, anomaly) — COMPLETE
+- 🟡 Phase 4: Hyperparameter tuning — IN PROGRESS (UI, YAML wiring, and tuner MVP implemented)
+- 🟡 Phase 5: Data augmentation — PARTIAL (~40%)
+- 🔴 Phase 6: Vision workflows — NOT STARTED
 - ✅ Phase 9: Testing and quality gates — 100% (53+ tests passing)
 
 ## Product Vision
