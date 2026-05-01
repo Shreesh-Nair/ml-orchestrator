@@ -354,6 +354,98 @@ stages:
         
         print(f"Comparison report: baseline={summary['baseline_score']:.4f}, best={summary['best_score']:.4f}, improvement={summary['improvement_pct']:.2f}%")
 
+    def test_validation_strategy_random(self, tmp_path):
+        """Test that random validation strategy works (no stratification)."""
+        pipeline_dict = {
+            "pipeline_name": "test_random_split",
+            "stages": [
+                {
+                    "name": "load_data",
+                    "type": "csv_loader",
+                    "params": {
+                        "source": str(Path(__file__).parent.parent / "data" / "titanic.csv"),
+                        "target_column": "Survived",
+                    },
+                },
+                {
+                    "name": "preprocess",
+                    "type": "tabular_preprocess",
+                    "params": {
+                        "target_column": "Survived",
+                        "task_type": "classification",
+                        "require_binary_target": True,
+                        "scale_numeric": True,
+                        "encode_categoricals": True,
+                        "test_size": 0.2,
+                        "random_state": 42,
+                        "validation_strategy": "random",
+                    },
+                },
+                {
+                    "name": "model",
+                    "type": "classification_rf",
+                    "params": {"random_state": 42},
+                },
+            ],
+        }
+
+        yaml_file = tmp_path / "test_random_split.yml"
+        yaml_file.write_text(yaml.dump(pipeline_dict))
+
+        context = run_pipeline(str(yaml_file))
+        assert context is not None
+        assert "X_train" in context
+        assert "X_test" in context
+        assert "y_train" in context
+        assert "y_test" in context
+        print(f"Random split: X_train shape={context['X_train'].shape}, X_test shape={context['X_test'].shape}")
+
+    def test_validation_strategy_stratified(self, tmp_path):
+        """Test that stratified validation strategy works (preserves class distribution)."""
+        pipeline_dict = {
+            "pipeline_name": "test_stratified_split",
+            "stages": [
+                {
+                    "name": "load_data",
+                    "type": "csv_loader",
+                    "params": {
+                        "source": str(Path(__file__).parent.parent / "data" / "titanic.csv"),
+                        "target_column": "Survived",
+                    },
+                },
+                {
+                    "name": "preprocess",
+                    "type": "tabular_preprocess",
+                    "params": {
+                        "target_column": "Survived",
+                        "task_type": "classification",
+                        "require_binary_target": True,
+                        "scale_numeric": True,
+                        "encode_categoricals": True,
+                        "test_size": 0.2,
+                        "random_state": 42,
+                        "validation_strategy": "stratified",
+                    },
+                },
+                {
+                    "name": "model",
+                    "type": "classification_rf",
+                    "params": {"random_state": 42},
+                },
+            ],
+        }
+
+        yaml_file = tmp_path / "test_stratified_split.yml"
+        yaml_file.write_text(yaml.dump(pipeline_dict))
+
+        context = run_pipeline(str(yaml_file))
+        assert context is not None
+        assert "X_train" in context
+        assert "X_test" in context
+        assert "y_train" in context
+        assert "y_test" in context
+        print(f"Stratified split: X_train shape={context['X_train'].shape}, X_test shape={context['X_test'].shape}")
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

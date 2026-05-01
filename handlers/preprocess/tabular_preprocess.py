@@ -53,6 +53,7 @@ class TabularPreprocessHandler(BaseHandler):
         require_binary_target = bool(
             self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
         )
+        validation_strategy = str(self.stage.params.get("validation_strategy", "stratified")).strip().lower()
         rare_category_min_freq = float(self.stage.params.get("rare_category_min_freq", 0.0))
         text_extract = bool(self.stage.params.get("text_extract", False))
         text_drop_original = bool(self.stage.params.get("text_drop_original", False))
@@ -219,12 +220,14 @@ class TabularPreprocessHandler(BaseHandler):
                 X_processed, y, test_size=test_size, random_state=random_state
             )
         else:
+            # Use stratified split if requested and binary classification, otherwise random
+            use_stratify = validation_strategy == "stratified"
             X_train, X_test, y_train, y_test = train_test_split(
                 X_processed,
                 y,
                 test_size=test_size,
                 random_state=random_state,
-                stratify=y,
+                stratify=y if use_stratify else None,
             )
 
         context["preprocessor"] = preprocessor

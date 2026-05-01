@@ -295,6 +295,18 @@ class MainWindow(QMainWindow):
         training_mode_row.addStretch()
         top_layout.addLayout(training_mode_row)
 
+        # Validation strategy controls
+        validation_row = QHBoxLayout()
+        validation_row.addWidget(QLabel("Validation strategy:"))
+        self.validation_strategy_combo = QComboBox()
+        self.validation_strategy_combo.addItem("Random split", "random")
+        self.validation_strategy_combo.addItem("Stratified split (preserves class distribution)", "stratified")
+        self.validation_strategy_combo.setCurrentIndex(1)  # Default to stratified
+        self.validation_strategy_combo.setToolTip("Random: shuffle data randomly. Stratified: preserve target class distribution.")
+        validation_row.addWidget(self.validation_strategy_combo)
+        validation_row.addStretch()
+        top_layout.addLayout(validation_row)
+
         target_row = QHBoxLayout()
         target_row.addWidget(QLabel("Target column:"))
         self.target_combo = QComboBox()
@@ -1550,6 +1562,10 @@ class MainWindow(QMainWindow):
             }
         )
 
+        validation_strategy = "stratified"  # Default
+        if hasattr(self, "validation_strategy_combo"):
+            validation_strategy = self.validation_strategy_combo.currentData() or "stratified"
+
         stages.append(
             {
                 "name": "preprocess",
@@ -1562,6 +1578,7 @@ class MainWindow(QMainWindow):
                     "encode_categoricals": self.encode_checkbox.isChecked(),
                     "test_size": float(self.test_size_spin.value()),
                     "random_state": int(self.random_seed_spin.value()),
+                    "validation_strategy": validation_strategy,
                 },
             }
         )
