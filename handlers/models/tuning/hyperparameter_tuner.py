@@ -78,6 +78,12 @@ class HyperparameterTunerHandler(BaseHandler):
                 out[k] = random.choice(choices)
             return out
 
+        # Optional: support Optuna for Bayesian-style search when requested.
+        use_optuna = bool(params.get("use_optuna", False))
+        if use_optuna and not space:
+            print("[hyperparameter_tune] Optuna requested but no search space defined; falling back to random sampling")
+            use_optuna = False
+
         # Step 1: Train baseline model (default params)
         baseline_context = self._train_model(context, model_type, {}, params, random_state)
         baseline_metrics = baseline_context.get("metrics", {})
@@ -92,36 +98,65 @@ class HyperparameterTunerHandler(BaseHandler):
         start = time.time()
         trial_num = 0
 
-        while trial_num < n_trials:
-            if max_time and (time.time() - start) > (max_time * 60):
-                break
+        # If Optuna requested and available, prefer it as a smarter search strategy.
+        if use_optuna:
+            try:
+                import optuna
 
-            # Early stopping
-            if trials_without_improvement >= early_stop_patience:
-                print(f"[hyperparameter_tune] Early stopping: no improvement in {early_stop_patience} trials")
-                break
+                def _optuna_objective(trial: optuna.trial.Trial) -> float:
+                    sampled = {}
+                    for k, choices in space.items():
+                        # use suggest_categorical for simplicity (choices are defined lists)
+                        sampled[k] = trial.suggest_categorical(k, choices)
 
-            sampled = sample_params(space) if space else {}
-            trial_context = self._train_model(context, model_type, sampled, params, random_state)
-            
-            if trial_context is None:
-                trials_without_improvement += 1
+                    trial_ctx = self._train_model(context, model_type, sampled, params, random_state)
+                    if trial_ctx is None:
+                        return float("-inf")
+                    metrics = trial_ctx.get("metrics") or {}
+                    return float(self._extract_score(metrics, params.get("task_type", "classification")))
+
+                study = optuna.create_study(direction="maximize")
+                study.optimize(_optuna_objective, n_trials=n_trials)
+                trial_num = len(study.trials)
+                if study.best_params:
+                    best_params = dict(study.best_params)
+                    best_context = self._train_model(context, model_type, best_params, params, random_state) or best_context
+                    best_score = self._extract_score(best_context.get("metrics", {}), params.get("task_type", "classification"))
+            except Exception as e:
+                print(f"[hyperparameter_tune] Optuna optimization failed or not available: {e}; falling back to random search")
+                use_optuna = False
+
+        if not use_optuna:
+            while trial_num < n_trials:
+                if max_time and (time.time() - start) > (max_time * 60):
+                    break
+
+                # Early stopping
+                if trials_without_improvement >= early_stop_patience:
+                    print(f"[hyperparameter_tune] Early stopping: no improvement in {early_stop_patience} trials")
+                    break
+
+                sampled = sample_params(space) if space else {}
+                trial_context = self._train_model(context, model_type, sampled, params, random_state)
+                
+                if trial_context is None:
+                    trials_without_improvement += 1
+                    trial_num += 1
+                    continue
+
+                metrics = trial_context.get("metrics") or {}
+                score = self._extract_score(metrics, params.get("task_type", "classification"))
+
+                if score > best_score:
+                    best_score = score
+                    best_context = trial_context
+                    best_params = sampled
+                    trials_without_improvement = 0
+                    print(f"[hyperparameter_tune] Trial {trial_num}: NEW BEST score={score:.4f}, params={sampled}")
+                else:
+                    trials_without_improvement += 1
+
                 trial_num += 1
-                continue
-
-            metrics = trial_context.get("metrics") or {}
-            score = self._extract_score(metrics, params.get("task_type", "classification"))
-
-            if score > best_score:
-                best_score = score
-                best_context = trial_context
-                best_params = sampled
-                trials_without_improvement = 0
-                print(f"[hyperparameter_tune] Trial {trial_num}: NEW BEST score={score:.4f}, params={sampled}")
-            else:
-                trials_without_improvement += 1
-
-            trial_num += 1
 
         # Step 3: Prepare comparison report
         elapsed_time = time.time() - start

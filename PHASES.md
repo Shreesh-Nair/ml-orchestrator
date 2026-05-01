@@ -215,8 +215,8 @@ Let power users tune models without CLI exposure.
 - [x] Added rule-based production recommendation to tuning summary
 - [x] Displayed model size and recommendation fields in gui/main.py metrics table
 - [x] Extended comparison report test coverage to assert new fields
-- [x] All tests passing after changes
-- [x] Changes committed: `[NEW_HASH]` — "Phase 4: add model size and recommendation details to tuning comparison report"
+- [x] All tests passing after changes (37 passed)
+- [x] Changes committed: `647eb95` — "Phase 4: add model size and recommendation details to tuning comparison report"
 - [x] Phase 4 progress: ~92% (rich comparison report complete; only optional Optuna search remains)
 
 ### Phase 4 Overall Status
