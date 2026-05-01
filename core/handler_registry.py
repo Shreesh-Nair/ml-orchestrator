@@ -29,6 +29,8 @@ from handlers.models.anomaly.one_class_svm import OneClassSVMHandler
 
 # Evaluation
 from handlers.evaluate.feature_importance import FeatureImportanceHandler
+# Hyperparameter tuning
+from handlers.models.tuning.hyperparameter_tuner import HyperparameterTunerHandler
 
 
 _HANDLER_REGISTRY: Dict[str, Type[BaseHandler]] = {
@@ -59,6 +61,8 @@ _HANDLER_REGISTRY: Dict[str, Type[BaseHandler]] = {
 
     # Evaluation
     "feature_importance": FeatureImportanceHandler,
+    # Hyperparameter tuning
+    "hyperparameter_tune": HyperparameterTunerHandler,
 }
 
 

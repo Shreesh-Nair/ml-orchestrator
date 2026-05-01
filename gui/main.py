@@ -268,6 +268,33 @@ class MainWindow(QMainWindow):
         self.lbl_model_guidance.setStyleSheet("font-size: 12px; color: #2b4c7e;")
         top_layout.addWidget(self.lbl_model_guidance)
 
+        # Training mode controls (Phase 4: hyperparameter tuning)
+        training_mode_row = QHBoxLayout()
+        training_mode_row.addWidget(QLabel("Training mode:"))
+        self.training_mode_combo = QComboBox()
+        self.training_mode_combo.addItem("Quick (train single model)", "quick")
+        self.training_mode_combo.addItem("Tune (hyperparameter search)", "tune")
+        self.training_mode_combo.addItem("Auto (time-budgeted search)", "auto")
+        self.training_mode_combo.setCurrentIndex(0)
+        training_mode_row.addWidget(self.training_mode_combo)
+
+        training_mode_row.addWidget(QLabel("Trials:"))
+        self.spin_n_trials = QSpinBox()
+        self.spin_n_trials.setRange(1, 1000)
+        self.spin_n_trials.setValue(20)
+        self.spin_n_trials.setToolTip("Number of random trials to evaluate when tuning.")
+        training_mode_row.addWidget(self.spin_n_trials)
+
+        training_mode_row.addWidget(QLabel("Max time (min):"))
+        self.spin_max_time = QSpinBox()
+        self.spin_max_time.setRange(0, 1440)
+        self.spin_max_time.setValue(0)
+        self.spin_max_time.setToolTip("Time budget in minutes for 'Auto' mode. 0 = no limit.")
+        training_mode_row.addWidget(self.spin_max_time)
+
+        training_mode_row.addStretch()
+        top_layout.addLayout(training_mode_row)
+
         target_row = QHBoxLayout()
         target_row.addWidget(QLabel("Target column:"))
         self.target_combo = QComboBox()
@@ -1481,37 +1508,65 @@ class MainWindow(QMainWindow):
         model_type = self.selected_model_type
         pipeline_name = f"{self.selected_task}_{model_type}_gui_run"
 
-        config = {
-            "pipeline_name": pipeline_name,
-            "stages": [
-                {
-                    "name": "load_data",
-                    "type": "csv_loader",
-                    "params": {
-                        "source": str(self.training_csv_path or self.csv_path),
-                        "target_column": self.target_column,
-                    },
+        # Build pipeline stages. Insert either a direct model stage (Quick)
+        # or a hyperparameter tuning stage (Tune/Auto).
+        stages = []
+
+        stages.append(
+            {
+                "name": "load_data",
+                "type": "csv_loader",
+                "params": {
+                    "source": str(self.training_csv_path or self.csv_path),
+                    "target_column": self.target_column,
                 },
-                {
-                    "name": "preprocess",
-                    "type": "tabular_preprocess",
-                    "params": {
-                        "target_column": self.target_column,
-                        "task_type": self.selected_task,
-                        "require_binary_target": bool(task_cfg.get("require_binary_target", False)),
-                        "scale_numeric": self.scale_checkbox.isChecked(),
-                        "encode_categoricals": self.encode_checkbox.isChecked(),
-                        "test_size": float(self.test_size_spin.value()),
-                        "random_state": int(self.random_seed_spin.value()),
-                    },
+            }
+        )
+
+        stages.append(
+            {
+                "name": "preprocess",
+                "type": "tabular_preprocess",
+                "params": {
+                    "target_column": self.target_column,
+                    "task_type": self.selected_task,
+                    "require_binary_target": bool(task_cfg.get("require_binary_target", False)),
+                    "scale_numeric": self.scale_checkbox.isChecked(),
+                    "encode_categoricals": self.encode_checkbox.isChecked(),
+                    "test_size": float(self.test_size_spin.value()),
+                    "random_state": int(self.random_seed_spin.value()),
                 },
-                {
-                    "name": "model",
-                    "type": model_type,
-                    "params": {"random_state": int(self.random_seed_spin.value())},
+            }
+        )
+
+        training_mode = getattr(self, "training_mode_combo", None)
+        training_mode_value = "quick"
+        if training_mode:
+            training_mode_value = self.training_mode_combo.currentData() or "quick"
+
+        if training_mode_value == "quick":
+            stages.append({
+                "name": "model",
+                "type": model_type,
+                "params": {"random_state": int(self.random_seed_spin.value())},
+            })
+        else:
+            # Add hyperparameter tuning stage which will produce the best model
+            n_trials = int(getattr(self, "spin_n_trials", None).value() if hasattr(self, "spin_n_trials") else 20)
+            max_time = int(getattr(self, "spin_max_time", None).value() if hasattr(self, "spin_max_time") else 0)
+            stages.append({
+                "name": "hyperparameter_tune",
+                "type": "hyperparameter_tune",
+                "params": {
+                    "model_type": model_type,
+                    "task_type": self.selected_task,
+                    "n_trials": n_trials,
+                    "max_time_minutes": max_time,
+                    "random_state": int(self.random_seed_spin.value()),
                 },
-            ],
-        }
+            })
+
+        config = {"pipeline_name": pipeline_name, "stages": stages}
 
         preprocess_params = config["stages"][1]["params"]
         if self._auto_preprocess_recommendations:
