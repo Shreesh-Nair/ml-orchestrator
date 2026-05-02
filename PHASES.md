@@ -232,6 +232,11 @@ Let power users tune models without CLI exposure.
 - [x] Changes committed: `d1de87d` — "Fix packaging precheck workflow: pin numpy<2 in pip install"
 - [x] Phase 8 packaging stability improved; CI should now pass on both Windows and Linux
 
+### Checkpoint (2026-05-02 - CI Shell Hardening)
+- [x] Pinned workflow step shells explicitly (`bash` on Linux, `pwsh` on Windows) to avoid runner-default shell mismatches
+- [x] Kept NumPy pins quoted and Windows cleanup PowerShell-native
+- [x] Phase 8 packaging and CI reliability improved further
+
 ### Phase 4 Overall Status
 🟡 **NEAR COMPLETE** (~92%) - Comprehensive hyperparameter tuning with GUI integration: three training modes, expanded search spaces, baseline comparison, early stopping, results display, validation strategy selection, and richer comparison reporting. Remaining: optional Optuna Bayesian search integration.
 

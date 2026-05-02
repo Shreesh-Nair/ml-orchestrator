@@ -27,30 +27,36 @@ jobs:
       
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon0 libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
       
       - name: Install dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install numpy<2 pandas<2.2 scikit-learn==1.5.2 "PySide6>=6.6,<6.7" pyinstaller pyyaml opencv-python-headless<4.11 joblib mlflow<3.0
+          pip install "numpy<2" "pandas<2.2" "scikit-learn==1.5.2" "PySide6>=6.6,<6.7" pyinstaller pyyaml "opencv-python-headless<4.11" joblib "mlflow<3.0"
       
       - name: Run packaging precheck
+        shell: bash
         run: |
           python scripts/check_packaging_env.py
       
       - name: Display NumPy version
+        shell: bash
         run: |
           python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
       
       - name: Build PyInstaller on Windows
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           pyinstaller --noconfirm --clean ml_orchestrator_demo.spec
       
       - name: Build PyInstaller on Linux
         if: runner.os == 'Linux'
+        shell: bash
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
@@ -58,6 +64,7 @@ jobs:
       
       - name: Verify executable exists on Windows
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           if ((Test-Path "dist\MLOrchestratorDemo\MLOrchestratorDemo.exe")) {
             Write-Host "✓ Executable created successfully"
@@ -70,6 +77,7 @@ jobs:
       
       - name: Verify executable exists on Linux
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           if [ -f "dist/MLOrchestratorDemo/MLOrchestratorDemo" ]; then
             echo "✓ Executable created successfully"
@@ -82,12 +90,14 @@ jobs:
       - name: Smoke test - Run basic help (Windows)
         if: runner.os == 'Windows'
         continue-on-error: true
+        shell: pwsh
         run: |
           "dist\MLOrchestratorDemo\MLOrchestratorDemo.exe" --help 2>&1 || Write-Host "Exe ran (or expected GUI launch)"
       
       - name: Smoke test - Run basic help (Linux)
         if: runner.os == 'Linux'
         continue-on-error: true
+        shell: bash
         run: |
           ./dist/MLOrchestratorDemo/MLOrchestratorDemo --help 2>&1 || echo "Exe ran (or expected GUI launch)"
       
@@ -106,6 +116,7 @@ jobs:
     if: always()
     steps:
       - name: Check packaging status
+        shell: bash
         run: |
           if [ "${{ needs.packaging-matrix.result }}" == "success" ]; then
             echo "✓ Packaging successful on all platforms"

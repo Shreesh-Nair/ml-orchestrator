@@ -29,19 +29,23 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Upgrade pip
+        shell: pwsh
         run: python -m pip install --upgrade pip
 
       - name: Install runtime deps (pin NumPy < 2 to avoid compatibility issues)
+        shell: pwsh
         run: |
           python -m pip install "numpy<2" "pandas<2.2" "PySide6>=6.6,<6.7" "scikit-learn==1.5.2" "pyyaml<7.0" "mlflow<3.0" "opencv-python-headless<4.11" pytest pyinstaller
 
       - name: Run tests (JUnit XML)
+        shell: pwsh
         run: |
-          if [ -d reports ]; then rm -rf reports; fi
-          mkdir reports
+          if (Test-Path reports) { Remove-Item -Recurse -Force reports }
+          New-Item -ItemType Directory -Path reports | Out-Null
           python -m pytest -q --junitxml=reports/junit.xml
 
       - name: Run quick-fix recommender on examples
+        shell: pwsh
         run: |
           python scripts\apply_recommender_to_examples.py
 
@@ -54,6 +58,7 @@ jobs:
           path: reports/junit.xml
 
       - name: Build PyInstaller exe
+        shell: pwsh
         run: |
           pyinstaller --noconfirm --clean "ml_orchestrator_demo.spec"
 
