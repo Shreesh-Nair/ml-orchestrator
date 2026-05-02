@@ -219,6 +219,19 @@ Let power users tune models without CLI exposure.
 - [x] Changes committed: `647eb95` — "Phase 4: add model size and recommendation details to tuning comparison report"
 - [x] Phase 4 progress: ~92% (rich comparison report complete; only optional Optuna search remains)
 
+### Checkpoint (2026-05-01 - Optuna Scaffold)
+- [x] Added optional Optuna integration scaffold to `handlers/models/tuning/hyperparameter_tuner.py` (uses Optuna when `use_optuna: true`, falls back to random search if Optuna unavailable)
+- [x] No new runtime dependency required (Optuna used only if installed)
+- [x] Changes committed: `d3463f1` — "Phase 4: add optional Optuna scaffold for Bayesian hyperparameter search (fallback to random)"
+- [x] Phase 4 progress: ~95% (Optuna scaffold added; next step: integrate UI toggle and consider adding Optuna to packaging/deps)
+
+### Checkpoint (2026-05-02 - CI Packaging Fix)
+- [x] Fixed Linux packaging matrix workflow so version pins are quoted for Bash and PySide6/Linux system dependencies are installed before PyInstaller runs
+- [x] Fixed Windows CI test step to use PowerShell-safe cleanup commands
+- [x] Changes committed: `d13e05b` — "Fix: add system dependencies for PySide6 on Linux CI build, use offscreen Qt platform"
+- [x] Changes committed: `d1de87d` — "Fix packaging precheck workflow: pin numpy<2 in pip install"
+- [x] Phase 8 packaging stability improved; CI should now pass on both Windows and Linux
+
 ### Phase 4 Overall Status
 🟡 **NEAR COMPLETE** (~92%) - Comprehensive hyperparameter tuning with GUI integration: three training modes, expanded search spaces, baseline comparison, early stopping, results display, validation strategy selection, and richer comparison reporting. Remaining: optional Optuna Bayesian search integration.
 
