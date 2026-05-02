@@ -40,6 +40,7 @@ jobs:
       - name: Run tests (JUnit XML)
         shell: pwsh
         run: |
+          Set-Location $env:GITHUB_WORKSPACE
           if (Test-Path reports) { Remove-Item -Recurse -Force reports }
           New-Item -ItemType Directory -Path reports | Out-Null
           python -m pytest -q --junitxml=reports/junit.xml
