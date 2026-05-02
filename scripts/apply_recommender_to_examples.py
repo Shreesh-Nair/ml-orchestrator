@@ -8,12 +8,18 @@ import json
 import pathlib
 import sys
 
+
 import pandas as pd
+
+
+# Make the repository root importable so running this script directly works from CI
+# (prevents ModuleNotFoundError: No module named 'core').
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from core.data_quality import analyze_data_quality, recommend_quick_fixes, apply_quick_fixes
 
-
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "build" / "cleaned_examples"
 OUT.mkdir(parents=True, exist_ok=True)
 
