@@ -43,6 +43,8 @@ jobs:
           Set-Location $env:GITHUB_WORKSPACE
           if (Test-Path reports) { Remove-Item -Recurse -Force reports }
           New-Item -ItemType Directory -Path reports | Out-Null
+          # Ensure a small synthetic fraud dataset exists for tests (large real dataset is gitignored)
+          python scripts\ensure_test_data.py
           python -m pytest -q --junitxml=reports/junit.xml
 
       - name: Run quick-fix recommender on examples
