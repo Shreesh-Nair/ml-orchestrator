@@ -27,6 +27,7 @@ class RandomForestTrainHandler(BaseHandler):
         n_estimators: int = 100
         max_depth: Optional[int] = None
         random_state = int(context.get("_random_seed", 42))
+        class_weight = None  # None = no weighting, 'balanced' = auto-weight by inverse class freq
 
         if self.stage.models:
             cfg = self.stage.models[0]
@@ -41,11 +42,14 @@ class RandomForestTrainHandler(BaseHandler):
                 n_estimators = int(params["n_estimators"])
             if "max_depth" in params and params["max_depth"] is not None:
                 max_depth = int(params["max_depth"])
+            if "class_weight" in params and params["class_weight"]:
+                class_weight = "balanced"
 
         model = RandomForestClassifier(
             n_estimators=n_estimators,
             max_depth=max_depth,
             random_state=random_state,
+            class_weight=class_weight,
             n_jobs=-1,
         )
         model.fit(X_train, y_train)

@@ -20,6 +20,7 @@ class LogisticRegressionHandler(BaseHandler):
         C: float = 1.0
         max_iter: int = 100
         random_state: int = int(context.get("_random_seed", 42))
+        class_weight = None  # None = no weighting, 'balanced' = auto-weight by inverse class freq
         
         # Parse params from YAML
         params = self.stage.params
@@ -29,9 +30,11 @@ class LogisticRegressionHandler(BaseHandler):
             max_iter = int(params["max_iter"])
         if "random_state" in params:
             random_state = int(params["random_state"])
+        if "class_weight" in params and params["class_weight"]:
+            class_weight = "balanced"
 
         # --- Training ---
-        model = LogisticRegression(C=C, max_iter=max_iter, random_state=random_state)
+        model = LogisticRegression(C=C, max_iter=max_iter, random_state=random_state, class_weight=class_weight)
         model.fit(X_train, y_train)
 
         # --- Predictions ---
@@ -74,5 +77,6 @@ class LogisticRegressionHandler(BaseHandler):
         context["metrics"] = metrics
         context["artifacts"] = artifacts
 
-        print(f"[logistic_regression] Trained LogReg (C={C}) -> acc={acc:.4f}")
+        weight_mode = "balanced" if class_weight else "none"
+        print(f"[logistic_regression] Trained LogReg (C={C}, class_weight={weight_mode}) -> acc={acc:.4f}")
         return context

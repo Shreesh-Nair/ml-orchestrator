@@ -307,6 +307,15 @@ class MainWindow(QMainWindow):
         validation_row.addStretch()
         top_layout.addLayout(validation_row)
 
+        # Class imbalance controls (Phase 5)
+        imbalance_row = QHBoxLayout()
+        self.checkbox_class_weight = QCheckBox("Handle class imbalance (auto-weight minority class)")
+        self.checkbox_class_weight.setChecked(False)
+        self.checkbox_class_weight.setToolTip("Enable class weighting to penalize minority class misclassification (useful for imbalanced datasets).")
+        imbalance_row.addWidget(self.checkbox_class_weight)
+        imbalance_row.addStretch()
+        top_layout.addLayout(imbalance_row)
+
         target_row = QHBoxLayout()
         target_row.addWidget(QLabel("Target column:"))
         self.target_combo = QComboBox()
@@ -1600,11 +1609,19 @@ class MainWindow(QMainWindow):
         if training_mode:
             training_mode_value = self.training_mode_combo.currentData() or "quick"
 
+        # Get class weight setting (Phase 5)
+        class_weight = False
+        if hasattr(self, "checkbox_class_weight"):
+            class_weight = self.checkbox_class_weight.isChecked()
+
         if training_mode_value == "quick":
             stages.append({
                 "name": "model",
                 "type": model_type,
-                "params": {"random_state": int(self.random_seed_spin.value())},
+                "params": {
+                    "random_state": int(self.random_seed_spin.value()),
+                    "class_weight": class_weight,
+                },
             })
         else:
             # Add hyperparameter tuning stage which will produce the best model
@@ -1619,6 +1636,7 @@ class MainWindow(QMainWindow):
                     "n_trials": n_trials,
                     "max_time_minutes": max_time,
                     "random_state": int(self.random_seed_spin.value()),
+                    "class_weight": class_weight,
                 },
             })
 
