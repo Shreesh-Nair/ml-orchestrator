@@ -267,9 +267,9 @@ Improve model quality through smarter preprocessing and feature engineering.
 - [x] Text feature extraction (word count, character length)
 - [x] Rare category grouping (combine infrequent values into "Other")
 - [x] Encoding strategy selection (one-hot, ordinal, target-encoding) — **CHECKPOINT 2026-05-03**; target encoder now uses sklearn.TargetEncoder with training labels
-- [ ] Scaling/normalization choices (StandardScaler, MinMaxScaler, none)
+- [x] Scaling/normalization choices (StandardScaler, MinMaxScaler, none) — **CHECKPOINT 2026-05-03**
 - [ ] Imputation strategies (median, mode, forward-fill, drop rows)
-- **Status**: 4 of 6 partially implemented; core recipes in place
+- **Status**: 5 of 6 partially implemented; core recipes in place
 
 ### Class Imbalance Options
 - [ ] Class weights (adjust loss to penalize minority class)

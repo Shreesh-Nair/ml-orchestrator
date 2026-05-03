@@ -8,7 +8,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler, TargetEncoder
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, OrdinalEncoder, StandardScaler, TargetEncoder
 
 from handlers.base import BaseHandler
 
@@ -19,7 +19,7 @@ class TabularPreprocessHandler(BaseHandler):
     - Splits df into X (features) and y (target)
     - Imputes missing values
     - One-hot encodes categoricals (if encode_categoricals=True)
-    - Scales numerical features (if scale_numeric=True)
+    - Scales numerical features (configurable scale strategy)
     - Train/test split (using test_size param)
     """
 
@@ -46,6 +46,10 @@ class TabularPreprocessHandler(BaseHandler):
         # Read preprocessing params
         impute_missing = bool(self.stage.params.get("impute_missing", True))
         scale_numeric = bool(self.stage.params.get("scale_numeric", True))
+        scale_strategy_raw = self.stage.params.get("scale_strategy")
+        scale_strategy = str(scale_strategy_raw).strip().lower() if scale_strategy_raw is not None else ""
+        if not scale_strategy:
+            scale_strategy = "standard" if scale_numeric else "none"
         encode_categoricals = bool(self.stage.params.get("encode_categoricals", True))
         test_size = float(self.stage.params.get("test_size", 0.2))
         random_state = int(self.stage.params.get("random_state", context.get("_random_seed", 42)))
@@ -187,8 +191,17 @@ class TabularPreprocessHandler(BaseHandler):
         numeric_transformers = []
         if impute_missing:
             numeric_transformers.append(("imputer", SimpleImputer(strategy="median")))
-        if scale_numeric:
+        if scale_strategy in {"standard", "standardscaler", "standard_scaler"}:
             numeric_transformers.append(("scaler", StandardScaler()))
+        elif scale_strategy in {"minmax", "minmaxscaler", "min_max", "min_max_scaler"}:
+            numeric_transformers.append(("scaler", MinMaxScaler()))
+        elif scale_strategy in {"none", "passthrough", "off", "false"}:
+            pass
+        else:
+            raise ValueError(
+                "TabularPreprocessHandler: scale_strategy must be one of 'standard', 'minmax', or 'none'. "
+                f"Got {scale_strategy_raw!r}"
+            )
 
         if numeric_transformers:
             numeric_transformer = Pipeline(steps=numeric_transformers)

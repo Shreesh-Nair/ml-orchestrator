@@ -501,9 +501,19 @@ class MainWindow(QMainWindow):
 
         prep_group = QGroupBox("Preprocessing")
         prep_layout = QVBoxLayout()
-        self.scale_checkbox = QCheckBox("Scale numeric features")
-        self.scale_checkbox.setChecked(True)
-        prep_layout.addWidget(self.scale_checkbox)
+        scale_row = QHBoxLayout()
+        scale_row.addWidget(QLabel("Numeric scaling:"))
+        self.scale_strategy_combo = QComboBox()
+        self.scale_strategy_combo.addItem("Standard scaling (zero mean, unit variance)", "standard")
+        self.scale_strategy_combo.addItem("Min-Max scaling (0 to 1 range)", "minmax")
+        self.scale_strategy_combo.addItem("No scaling", "none")
+        self.scale_strategy_combo.setCurrentIndex(0)
+        self.scale_strategy_combo.setToolTip(
+            "Standard scaling centers and scales numeric features. Min-Max rescales them into [0, 1]. No scaling leaves them unchanged."
+        )
+        scale_row.addWidget(self.scale_strategy_combo)
+        scale_row.addStretch()
+        prep_layout.addLayout(scale_row)
 
         self.encode_checkbox = QCheckBox("One-hot encode categorical features")
         self.encode_checkbox.setChecked(True)
@@ -1325,7 +1335,7 @@ class MainWindow(QMainWindow):
         self.btn_browse_csv.setEnabled(not in_progress)
         self.btn_run_demo.setEnabled(not in_progress)
         self.target_combo.setEnabled((not in_progress) and self.current_df is not None)
-        self.scale_checkbox.setEnabled(not in_progress)
+        self.scale_strategy_combo.setEnabled(not in_progress)
         self.encode_checkbox.setEnabled(not in_progress)
         self.test_size_spin.setEnabled(not in_progress)
         self.random_seed_spin.setEnabled(not in_progress)
@@ -1613,7 +1623,8 @@ class MainWindow(QMainWindow):
                     "target_column": self.target_column,
                     "task_type": self.selected_task,
                     "require_binary_target": bool(task_cfg.get("require_binary_target", False)),
-                    "scale_numeric": self.scale_checkbox.isChecked(),
+                    "scale_strategy": self.scale_strategy_combo.currentData() or "standard",
+                    "scale_numeric": (self.scale_strategy_combo.currentData() or "standard") != "none",
                     "encode_categoricals": self.encode_checkbox.isChecked(),
                     "test_size": float(self.test_size_spin.value()),
                     "random_state": int(self.random_seed_spin.value()),
@@ -1762,7 +1773,8 @@ class MainWindow(QMainWindow):
             "positive_label": artifacts.get("positive_label"),
             "preprocess": {
                 "task": task_cfg.get("label", self.selected_task),
-                "scale_numeric": self.scale_checkbox.isChecked(),
+                "scale_strategy": self.scale_strategy_combo.currentData() or "standard",
+                "scale_numeric": (self.scale_strategy_combo.currentData() or "standard") != "none",
                 "encode_categoricals": self.encode_checkbox.isChecked(),
                 "test_size": float(self.test_size_spin.value()),
                 "random_seed": int(self.random_seed_spin.value()),
@@ -2083,7 +2095,8 @@ class MainWindow(QMainWindow):
             "csv_path": str(self.csv_path) if self.csv_path else None,
             "target_column": self.target_column,
             "preprocess": {
-                "scale_numeric": self.scale_checkbox.isChecked(),
+                "scale_strategy": self.scale_strategy_combo.currentData() or "standard",
+                "scale_numeric": (self.scale_strategy_combo.currentData() or "standard") != "none",
                 "encode_categoricals": self.encode_checkbox.isChecked(),
                 "test_size": float(self.test_size_spin.value()),
                 "random_seed": int(self.random_seed_spin.value()),
@@ -2131,7 +2144,11 @@ class MainWindow(QMainWindow):
                 raise ValueError("Session file must contain a JSON object")
 
             preprocess = payload.get("preprocess") or {}
-            self.scale_checkbox.setChecked(bool(preprocess.get("scale_numeric", True)))
+            scale_strategy = str(preprocess.get("scale_strategy", "")).strip().lower()
+            if not scale_strategy:
+                scale_strategy = "standard" if bool(preprocess.get("scale_numeric", True)) else "none"
+            idx_scale = self.scale_strategy_combo.findData(scale_strategy)
+            self.scale_strategy_combo.setCurrentIndex(idx_scale if idx_scale >= 0 else 0)
             self.encode_checkbox.setChecked(bool(preprocess.get("encode_categoricals", True)))
             self.test_size_spin.setValue(float(preprocess.get("test_size", 0.2)))
             self.random_seed_spin.setValue(int(preprocess.get("random_seed", 42)))
