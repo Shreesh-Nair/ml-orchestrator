@@ -8,7 +8,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler, TargetEncoder
 
 from handlers.base import BaseHandler
 
@@ -205,11 +205,10 @@ class TabularPreprocessHandler(BaseHandler):
                     ]
                 )
             elif encoding_strategy == "target":
-                # Target encoding will be applied after train/test split
                 categorical_transformer = Pipeline(
                     steps=[
                         ("imputer", SimpleImputer(strategy="most_frequent")),
-                        ("passthrough", "passthrough"),  # placeholder, actual target encoding happens below
+                        ("target", TargetEncoder(cv=2, shuffle=True, random_state=random_state)),
                     ]
                 )
             else:  # Default: onehot
@@ -230,7 +229,7 @@ class TabularPreprocessHandler(BaseHandler):
             ]
         )
 
-        X_processed = preprocessor.fit_transform(X)
+        X_processed = preprocessor.fit_transform(X, y)
 
         if task_type == "regression":
             X_train, X_test, y_train, y_test = train_test_split(
