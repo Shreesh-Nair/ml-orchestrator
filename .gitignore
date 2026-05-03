@@ -1,9 +1,13 @@
-﻿# Python cache and bytecode
+﻿# =========================
+# Python cache and bytecode
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Test and lint caches
+# =========================
+# Testing caches and reports
+# =========================
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -11,28 +15,31 @@ __pycache__/
 .pyre/
 .tox/
 .nox/
-
-# Coverage
 .coverage
 .coverage.*
 htmlcov/
-
-# Test reports
-.pytest_*.xml
+reports/
 pytest-report.xml
 junit*.xml
 test_output.txt
 test_results_final.txt
 test_full_results.txt
 
-# Build artifacts
+# =========================
+# Build and packaging
+# =========================
 build/
 dist/
 .eggs/
 *.egg-info/
 pip-wheel-metadata/
+spec.d/
+onefile_*.txt
+dist/installer/*.sha256.txt
 
-# Virtual environments (local dev, packaging, testing)
+# =========================
+# Virtual environments and env files
+# =========================
 .venv/
 .venv_*/
 venv/
@@ -40,43 +47,46 @@ env/
 ENV/
 .python-version
 .env
+.env.local
+.env.*.local
 
-# IDE/editor and OS files
+# =========================
+# Editor and OS files
+# =========================
 .vscode/
 .idea/
 *.iml
 .DS_Store
 Thumbs.db
 
-# Runtime app artifacts (repo root)
+# =========================
+# Runtime artifacts and logs (do not commit runtime outputs)
+# =========================
 /logs/
 /models/
-/examples/generated/
 /mlruns/
+examples/generated/
+test-output/
+*.json.backup
 
-# Temporary files
+# =========================
+# Temporary and transient files
+# =========================
 *.tmp
 *.temp
 *.log
 *~
-.DS_Store
-Thumbs.db
 
-# PyInstaller build artifacts (keep build/ in .gitignore)
-spec.d/
-onefile_*.txt
-dist/installer/*.sha256.txt
+# =========================
+# Notebook checkpoints
+# =========================
+.ipynb_checkpoints/
 
-# Poetry lock files (optional - typically committed)
-# poetry.lock
-
-# Local testing artifacts
-test-output/
-*.json.backup
-
-# Large/local data artifacts
+# =========================
+# Large/local data artifacts (keep out of repo)
+# =========================
 /data/fraud.csv
 /data/*.zip
 
-# Notebook checkpoints
-.ipynb_checkpoints/
+# Optional: commit your lockfile if you prefer reproducible installs
+# poetry.lock
