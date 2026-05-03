@@ -316,6 +316,19 @@ class MainWindow(QMainWindow):
         imbalance_row.addStretch()
         top_layout.addLayout(imbalance_row)
 
+        # Encoding strategy control (Phase 5)
+        encoding_row = QHBoxLayout()
+        encoding_row.addWidget(QLabel("Encoding strategy:"))
+        self.encoding_combo = QComboBox()
+        self.encoding_combo.addItem("One-Hot (standard, creates many columns)", "onehot")
+        self.encoding_combo.addItem("Ordinal (orderable categories, fewer columns)", "ordinal")
+        self.encoding_combo.addItem("Target (mean-target-encoded, uses target info)", "target")
+        self.encoding_combo.setCurrentIndex(0)
+        self.encoding_combo.setToolTip("One-Hot: standard and robust. Ordinal: for orderable categories. Target: uses target mean (may overfit on small data).")
+        encoding_row.addWidget(self.encoding_combo)
+        encoding_row.addStretch()
+        top_layout.addLayout(encoding_row)
+
         target_row = QHBoxLayout()
         target_row.addWidget(QLabel("Target column:"))
         self.target_combo = QComboBox()
@@ -1587,6 +1600,11 @@ class MainWindow(QMainWindow):
         if hasattr(self, "validation_strategy_combo"):
             validation_strategy = self.validation_strategy_combo.currentData() or "stratified"
 
+        # Get encoding strategy setting (Phase 5)
+        encoding_strategy = "onehot"
+        if hasattr(self, "encoding_combo"):
+            encoding_strategy = self.encoding_combo.currentData() or "onehot"
+
         stages.append(
             {
                 "name": "preprocess",
@@ -1600,6 +1618,7 @@ class MainWindow(QMainWindow):
                     "test_size": float(self.test_size_spin.value()),
                     "random_state": int(self.random_seed_spin.value()),
                     "validation_strategy": validation_strategy,
+                    "encoding_strategy": encoding_strategy,
                 },
             }
         )

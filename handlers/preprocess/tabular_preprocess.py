@@ -8,7 +8,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
 from handlers.base import BaseHandler
 
@@ -54,6 +54,7 @@ class TabularPreprocessHandler(BaseHandler):
             self.stage.params.get("require_binary_target", task_type in {"classification", "anomaly"})
         )
         validation_strategy = str(self.stage.params.get("validation_strategy", "stratified")).strip().lower()
+        encoding_strategy = str(self.stage.params.get("encoding_strategy", "onehot")).strip().lower()
         rare_category_min_freq = float(self.stage.params.get("rare_category_min_freq", 0.0))
         text_extract = bool(self.stage.params.get("text_extract", False))
         text_drop_original = bool(self.stage.params.get("text_drop_original", False))
@@ -196,12 +197,28 @@ class TabularPreprocessHandler(BaseHandler):
 
         # Categorical pipeline
         if encode_categoricals:
-            categorical_transformer = Pipeline(
-                steps=[
-                    ("imputer", SimpleImputer(strategy="most_frequent")),
-                    ("onehot", OneHotEncoder(handle_unknown="ignore")),
-                ]
-            )
+            if encoding_strategy == "ordinal":
+                categorical_transformer = Pipeline(
+                    steps=[
+                        ("imputer", SimpleImputer(strategy="most_frequent")),
+                        ("ordinal", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)),
+                    ]
+                )
+            elif encoding_strategy == "target":
+                # Target encoding will be applied after train/test split
+                categorical_transformer = Pipeline(
+                    steps=[
+                        ("imputer", SimpleImputer(strategy="most_frequent")),
+                        ("passthrough", "passthrough"),  # placeholder, actual target encoding happens below
+                    ]
+                )
+            else:  # Default: onehot
+                categorical_transformer = Pipeline(
+                    steps=[
+                        ("imputer", SimpleImputer(strategy="most_frequent")),
+                        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+                    ]
+                )
         else:
             # Current models do not support raw strings directly.
             categorical_transformer = "drop"
